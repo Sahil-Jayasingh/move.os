@@ -368,12 +368,23 @@ body{ position:relative; }
     <div class="cert-row"><span>Status</span><b class="cert-status">COMPLIANT</b></div>
     <div class="cert-row"><span>Movement Credits</span><b id="c-credits">100 / 100</b></div>
     <div class="cert-row"><span>Verification Time</span><b id="c-time">—</b></div>
-    <div class="cert-row" style="border-bottom:none;"><span>Certificate ID</span><b id="c-id">—</b></div>
+    <div class="cert-row"><span>Certificate ID</span><b id="c-id">—</b></div>
+    <div class="cert-row" style="border-bottom:none; flex-direction:column; align-items:flex-start; gap:6px;"><span>Officer's Note</span><b id="c-notes" style="font-family:var(--f-sans); font-weight:400; text-align:left; color:var(--white);">—</b></div>
   </div>
   <div style="display:flex; gap:14px;">
     <button class="btn" id="btn-download-cert">Download Certificate</button>
     <button class="btn" id="btn-continue-final">Continue</button>
   </div>
+</section>
+
+<!-- ================= REWARD ================= -->
+<section class="screen hidden" id="screen-reward">
+  <div class="eyebrow">Entertainment Access — Granted</div>
+  <h1 style="font-family:var(--f-num); font-size:clamp(22px,3.6vw,34px); letter-spacing:0.05em; text-align:center; max-width:820px; color:var(--white);">COMPLIANCE CONFIRMED. PERMITTED ENTERTAINMENT UNLOCKED.</h1>
+  <div style="width:min(820px,92vw); aspect-ratio:16/9; border:1px solid var(--border); background:#000;">
+    <iframe width="100%" height="100%" src="https://www.youtube.com/embed/aqz-KE-bpKQ?rel=0" title="Permitted Entertainment" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen style="display:block;"></iframe>
+  </div>
+  <button class="btn" id="btn-reward-continue">Continue</button>
 </section>
 
 <!-- ================= FINAL ================= -->
@@ -829,7 +840,7 @@ function updateStateMachine(raw, symmetryDelta){
       } else if(!ex.reachedBottom && ex.bottomDepth < 0.35 && state.repTimestamps.length + state.repCount > 0){
         // attempted a cycle but never hit depth threshold
         logViolation("Insufficient Depth", "WARNING");
-        pushObservation(OBSERVATIONS_POOL.low_depth[randInt(0,OBSERVATIONS_POOL.low_depth.length-1)]);
+        requestAIObservation("low_depth", {});
       }
       ex.reachedBottom = false;
       ex.bottomDepth = 0;
@@ -857,7 +868,7 @@ function completeRep(){
   const violationPenalty = Math.min(30, state.violations.length*3);
   state.compliance = clamp(Math.round((state.repCount/state.targetReps)*avgQuality) - violationPenalty, 0, 100);
 
-  pushObservation(OBSERVATIONS_POOL.success[randInt(0,OBSERVATIONS_POOL.success.length-1)]);
+  requestAIObservation("success", {});
   updateDashboardNumbers();
   syncTelemetry();
 
@@ -944,11 +955,47 @@ function pushObservation(text){
 
 // periodic ambient observations even without reps
 setInterval(() => {
-  if(!state.completed && state.exercise){
-    const pool = OBSERVATIONS_POOL.good;
-    pushObservation(pool[randInt(0,pool.length-1)]);
+  if(!state.completed && state.exercise && state.trackingOk){
+    requestAIObservation("ambient", {});
   }
 }, 5200);
+
+// ---------------------------------------------------------------------
+// Real AI observations (Groq, via backend) — falls back to the canned
+// OBSERVATIONS_POOL lines only when offline or the AI call fails, so the
+// feed never goes silent, but every line is genuinely model-generated
+// whenever the backend + GROQ_API_KEY are configured.
+// ---------------------------------------------------------------------
+const aiPending = { ambient:false, success:false, low_depth:false, tracking:false };
+
+async function requestAIObservation(kind, extra){
+  const fallback = () => {
+    const pool = OBSERVATIONS_POOL[kind] || OBSERVATIONS_POOL.good;
+    pushObservation(pool[randInt(0,pool.length-1)]);
+  };
+  if(!state.backendOnline || !state.sessionId){ fallback(); return; }
+  if(aiPending[kind]) return;
+  aiPending[kind] = true;
+  const last = state.qualitySamples[state.qualitySamples.length-1];
+  const body = {
+    session_id: state.sessionId,
+    kind,
+    exercise: state.exercise,
+    rep_count: state.repCount,
+    target: state.targetReps,
+    depth: (last?.depth || 0)/100,
+    symmetry: (last?.symmetry || 0)/100,
+    cadence: parseFloat($("q-cadence").textContent) || 0,
+    threat: state.threat,
+    compliance: state.compliance,
+    credits: state.credits,
+    violations_count: state.violations.length,
+    ...extra,
+  };
+  const res = await apiPost("/ai/observe", body);
+  aiPending[kind] = false;
+  if(res && res.text){ pushObservation(res.text); } else { fallback(); }
+}
 
 // ---------------------------------------------------------------------
 // Dashboard number updates (throttled)
@@ -1018,6 +1065,17 @@ function poseLoop(){
   requestAnimationFrame(poseLoop);
 }
 
+// Tracking is gated on UPPER-BODY visibility only (nose/shoulders/elbows/
+// wrists) — those are visible in almost any webcam framing, including a
+// laptop close-up where hips/knees/ankles are out of frame. Requiring the
+// full lower body here was the actual bug: on a typical webcam framing
+// avgVis for hips/knees/ankles never crosses the old 0.45 threshold, so
+// genericMovementMetric() never even ran and the rep bar could never move,
+// no matter how hard someone moved. Lower-body visibility is now only used
+// for an informational hint, never to block scoring.
+const CORE_VIS_KEYS = [IDX.NOSE, IDX.L_SH, IDX.R_SH, IDX.L_EL, IDX.R_EL, IDX.L_WR, IDX.R_WR];
+const FULL_VIS_KEYS = [IDX.L_HIP, IDX.R_HIP, IDX.L_KN, IDX.R_KN, IDX.L_AN, IDX.R_AN];
+
 function handlePoseResult(result){
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
@@ -1027,17 +1085,17 @@ function handlePoseResult(result){
   }
   const lm = result.landmarks[0];
 
-  const visKeys = [IDX.L_SH,IDX.R_SH,IDX.L_HIP,IDX.R_HIP,IDX.L_KN,IDX.R_KN,IDX.L_AN,IDX.R_AN];
-  const avgVis = visKeys.reduce((a,i)=> a + (lm[i].visibility ?? 0.8), 0) / visKeys.length;
-  state.trackingConfidence = avgVis;
+  const coreVis = CORE_VIS_KEYS.reduce((a,i)=> a + (lm[i].visibility ?? 0.8), 0) / CORE_VIS_KEYS.length;
+  const fullVis = FULL_VIS_KEYS.reduce((a,i)=> a + (lm[i].visibility ?? 0.8), 0) / FULL_VIS_KEYS.length;
+  state.trackingConfidence = coreVis;
 
-  if(avgVis < 0.45){
-    setTrackingLost(avgVis, false);
-    drawSkeleton(lm, avgVis);
+  if(coreVis < 0.3){
+    setTrackingLost(coreVis, false);
+    drawSkeleton(lm, coreVis);
     return;
   }
-  setTrackingOk(avgVis);
-  drawSkeleton(lm, avgVis);
+  setTrackingOk(coreVis, fullVis);
+  drawSkeleton(lm, coreVis);
   updateLiveness(lm);
 
   if(state.exercise && !state.completed){
@@ -1048,34 +1106,28 @@ function handlePoseResult(result){
   }
 }
 
-let stepBackHinted = false;
 function setTrackingLost(avgVis, noLandmarksAtAll){
   if(state.trackingOk){
     state.trackingOk = false;
     logViolation("Citizen Out Of View", "WARNING");
-    pushObservation("Tracking confidence degraded. Verification suspended.");
+    requestAIObservation("tracking", { note_hint: "tracking lost" });
   }
   $("cctv-confidence").textContent = `TRACKING ${Math.round((avgVis||0)*100)}%`;
-  if(noLandmarksAtAll){
-    $("cctv-state").textContent = "CITIZEN NOT DETECTED";
-  } else {
-    // Landmarks exist but confidence is low — almost always means the exercise's
-    // key joints (hips/knees/ankles for squats etc.) are out of the camera frame,
-    // not that no one is there. Say so, don't just say "not detected".
-    $("cctv-state").textContent = "STEP BACK — FULL BODY REQUIRED";
-    if(!stepBackHinted){
-      stepBackHinted = true;
-      pushObservation("Full body not in frame. Step back so hips, knees, and ankles are visible.");
-    }
-  }
+  $("cctv-state").textContent = noLandmarksAtAll ? "CITIZEN NOT DETECTED" : "STEP INTO FRAME";
   setPipeline("pl-pose", false);
 }
-function setTrackingOk(vis){
+
+let fullBodyHinted = false;
+function setTrackingOk(vis, fullVis){
   if(!state.trackingOk){
     state.trackingOk = true;
-    pushObservation("Pose lock re-acquired. Verification resumed.");
+    requestAIObservation("tracking", { note_hint: "tracking resumed" });
   }
   $("cctv-confidence").textContent = `TRACKING ${Math.round(vis*100)}%`;
+  if(fullVis < 0.45 && !fullBodyHinted){
+    fullBodyHinted = true;
+    pushObservation("Full body partially out of frame. Upper-body movement verification active.");
+  }
 }
 
 const SKELETON_EDGES = [
@@ -1141,7 +1193,15 @@ async function showCertificate(){
   $("c-credits").textContent = `${cert.movement_credits ?? state.credits} / 100`;
   $("c-time").textContent = cert.verification_time || nowClock();
   $("c-id").textContent = cert.certificate_id || newCertId();
+  $("c-notes").textContent = "GENERATING OFFICER'S NOTE…";
   show("screen-certificate");
+
+  if(state.backendOnline && state.sessionId){
+    const summary = await apiPost(`/ai/session-summary?session_id=${state.sessionId}`, null);
+    $("c-notes").textContent = (summary && summary.notes) ? summary.notes : "Note unavailable.";
+  } else {
+    $("c-notes").textContent = "Note unavailable — offline verification only.";
+  }
 }
 
 $("btn-download-cert").addEventListener("click", () => {
@@ -1151,6 +1211,7 @@ $("btn-download-cert").addEventListener("click", () => {
     movement_credits: $("c-credits").textContent,
     verification_time: $("c-time").textContent,
     certificate_id: $("c-id").textContent,
+    officers_note: $("c-notes").textContent,
     issuing_authority: "WORLD HEALTH AUTHORITY — MINISTRY OF HUMAN PERFORMANCE",
   };
   const blob = new Blob([JSON.stringify(cert, null, 2)], { type:"application/json" });
@@ -1161,7 +1222,10 @@ $("btn-download-cert").addEventListener("click", () => {
   URL.revokeObjectURL(url);
 });
 
-$("btn-continue-final").addEventListener("click", () => show("screen-final"));
+$("btn-continue-final").addEventListener("click", () => {
+  show(state.credits >= 100 ? "screen-reward" : "screen-final");
+});
+$("btn-reward-continue").addEventListener("click", () => show("screen-final"));
 $("btn-restart").addEventListener("click", () => window.location.reload());
 
 $("btn-appeal").addEventListener("click", async () => {

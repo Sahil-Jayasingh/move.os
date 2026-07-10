@@ -18,6 +18,7 @@ What changed vs v12.4:
 """
 
 import json
+import os
 import random
 import sqlite3
 import time
@@ -27,11 +28,49 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+import httpx
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 app = FastAPI(title="SWEATNET Government Verification API", version="13.0")
+
+# --------------------------------------------------------------------------
+# Real AI — Groq (OpenAI-compatible chat completions). Set GROQ_API_KEY as
+# an env var (Render dashboard, or a local .env loaded by your shell) —
+# never hardcode it here. If it's unset, /ai/* endpoints return 503 and the
+# frontend falls back to its canned observation lines instead of failing.
+# --------------------------------------------------------------------------
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.1-8b-instant")
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+
+
+async def call_groq(system: str, user: str, max_tokens: int = 40) -> Optional[str]:
+    if not GROQ_API_KEY:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            resp = await client.post(
+                GROQ_URL,
+                headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
+                json={
+                    "model": GROQ_MODEL,
+                    "messages": [
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": user},
+                    ],
+                    "max_tokens": max_tokens,
+                    "temperature": 0.85,
+                },
+            )
+        if resp.status_code != 200:
+            return None
+        data = resp.json()
+        text = data["choices"][0]["message"]["content"].strip().strip('"').strip()
+        return text[:280] if text else None
+    except Exception:
+        return None
 
 app.add_middleware(
     CORSMiddleware,
@@ -84,6 +123,10 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id);
             """
         )
+        try:
+            db.execute("ALTER TABLE sessions ADD COLUMN notes TEXT")
+        except sqlite3.OperationalError:
+            pass  # column already exists (fresh vs. upgraded sweatnet.db)
         db.commit()
 
 
@@ -192,6 +235,22 @@ class EventIn(BaseModel):
     session_id: str
     severity: str = Field(description="INFO | WARNING | VIOLATION | CRITICAL")
     description: str
+
+
+class AIObserveIn(BaseModel):
+    session_id: str
+    kind: str = "ambient"  # ambient | success | low_depth | tracking
+    exercise: Optional[str] = None
+    rep_count: int = 0
+    target: int = 0
+    depth: float = 0.0
+    symmetry: float = 0.0
+    cadence: float = 0.0
+    threat: Optional[str] = "LOW"
+    compliance: int = 0
+    credits: int = 0
+    violations_count: int = 0
+    note_hint: Optional[str] = None
 
 
 # --------------------------------------------------------------------------
@@ -374,15 +433,95 @@ def certificate(session_id: str):
         session = get_session_or_404(db, session_id)
         if session["status"] != "COMPLIANT":
             raise HTTPException(status_code=403, detail="VERIFICATION INCOMPLETE — CERTIFICATE DENIED")
+        session = dict(session)
         return {
             "certificate_id": new_certificate_id(),
             "citizen_id": session["citizen_id"],
             "status": "COMPLIANT",
             "movement_credits": session["credits"],
             "verification_time": session["verified_at"],
+            "notes": session.get("notes"),
             "issuing_authority": "WORLD HEALTH AUTHORITY — MINISTRY OF HUMAN PERFORMANCE",
             "revision": "13.0",
         }
+
+
+@app.post("/ai/observe")
+async def ai_observe(payload: AIObserveIn):
+    """Real, model-generated observation line for the AI Observation Feed —
+    not picked from a static list. Also persisted as a session note (INFO
+    event) so every session's AI commentary survives in the DB and shows up
+    in /events/{session_id} and /admin/sessions."""
+    if not GROQ_API_KEY:
+        raise HTTPException(status_code=503, detail="AI OBSERVER OFFLINE — GROQ_API_KEY NOT CONFIGURED")
+
+    system = (
+        "You are the AI surveillance observer for SWEATNET, a dystopian 2050 government "
+        "fitness-verification system. You watch a citizen exercise via CCTV and log exactly "
+        "ONE short, cold, bureaucratic observation line about their movement, based only on "
+        "the metrics given. Rules: one sentence, under 14 words, no quotation marks, no "
+        "markdown, no emoji, terminal-log tone, e.g. 'Cadence within tolerance. Compliance "
+        "trending upward.'"
+    )
+    user = (
+        f"kind={payload.kind} exercise={payload.exercise} reps={payload.rep_count}/{payload.target} "
+        f"depth={payload.depth:.2f} symmetry={payload.symmetry:.2f} cadence={payload.cadence:.1f} "
+        f"threat={payload.threat} compliance={payload.compliance} credits={payload.credits} "
+        f"violations={payload.violations_count} hint={payload.note_hint or ''}"
+    )
+    text = await call_groq(system, user, max_tokens=30)
+    if not text:
+        raise HTTPException(status_code=502, detail="AI OBSERVER — NO RESPONSE")
+
+    with get_db() as db:
+        get_session_or_404(db, payload.session_id)
+        event = {
+            "incident_id": new_incident_id(),
+            "session_id": payload.session_id,
+            "severity": "INFO",
+            "description": text,
+            "timestamp": now_iso(),
+        }
+        db.execute(
+            "INSERT INTO events (incident_id, session_id, severity, description, timestamp) VALUES (?,?,?,?,?)",
+            (event["incident_id"], event["session_id"], event["severity"], event["description"], event["timestamp"]),
+        )
+        db.commit()
+
+    await bus.broadcast({"type": "ai_observation", "data": event})
+    return {"text": text}
+
+
+@app.post("/ai/session-summary")
+async def ai_session_summary(session_id: str):
+    """Model-generated closing note for a completed session's certificate —
+    stored on the session row so it survives a restart."""
+    with get_db() as db:
+        session = get_session_or_404(db, session_id)
+        session = dict(session)
+
+    if not GROQ_API_KEY:
+        raise HTTPException(status_code=503, detail="AI OBSERVER OFFLINE — GROQ_API_KEY NOT CONFIGURED")
+
+    system = (
+        "You are the AI compliance officer for SWEATNET, a dystopian 2050 government "
+        "fitness-verification system, writing the closing remark on a citizen's compliance "
+        "certificate. Write 1-2 short sentences, cold bureaucratic tone, referencing their "
+        "actual performance numbers. No markdown, no quotation marks."
+    )
+    user = (
+        f"exercise={session.get('exercise')} reps={session.get('rep_count')}/{session.get('target_reps')} "
+        f"credits={session.get('credits')} compliance={session.get('compliance')} status={session.get('status')}"
+    )
+    text = await call_groq(system, user, max_tokens=70)
+    if not text:
+        raise HTTPException(status_code=502, detail="AI OBSERVER — NO RESPONSE")
+
+    with get_db() as db:
+        db.execute("UPDATE sessions SET notes=? WHERE session_id=?", (text, session_id))
+        db.commit()
+
+    return {"notes": text}
 
 
 @app.get("/stats/global")
