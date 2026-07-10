@@ -1,0 +1,1114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SWEATNET — Movement Verification Gateway</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg-0:#050505; --bg-1:#0A0A0A; --bg-2:#111111; --bg-3:#1C1C1C;
+  --white:#F2F2F2; --gray:#8B8B8B; --gray-dim:#5A5A5A;
+  --red:#C81E3A; --red-dim:#5A1220;
+  --green:#2E9A5E; --green-dim:#123A22;
+  --border:#242424;
+  --f-mono:'IBM Plex Mono', monospace;
+  --f-sans:'Inter', sans-serif;
+  --f-num:'JetBrains Mono', monospace;
+}
+*{box-sizing:border-box; margin:0; padding:0;}
+html,body{
+  background:var(--bg-0); color:var(--white);
+  font-family:var(--f-mono); height:100%; width:100%;
+  overflow:hidden; letter-spacing:0.02em;
+}
+body{ position:relative; }
+.hidden{ display:none !important; }
+.noise{
+  position:fixed; inset:0; pointer-events:none; z-index:9999; opacity:0.035; mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.scanlines{
+  position:fixed; inset:0; pointer-events:none; z-index:9998;
+  background:repeating-linear-gradient(to bottom, rgba(255,255,255,0.025) 0px, rgba(255,255,255,0.025) 1px, transparent 1px, transparent 3px);
+}
+.vignette{ position:fixed; inset:0; pointer-events:none; z-index:9997;
+  box-shadow: inset 0 0 220px rgba(0,0,0,0.85);
+}
+::selection{ background:var(--red); color:var(--white); }
+
+.screen{ position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+.eyebrow{ font-size:11px; letter-spacing:0.35em; color:var(--gray); text-transform:uppercase; }
+.seal{ width:46px; height:46px; border:1.5px solid var(--gray); border-radius:50%; display:flex; align-items:center; justify-content:center; font-family:var(--f-num); font-size:9px; color:var(--gray); letter-spacing:0.05em; }
+
+/* ---------- SCREEN 1: ACCESS RESTRICTED ---------- */
+#screen-restricted{ background:var(--bg-0); text-align:center; gap:22px; }
+#screen-restricted .bg-scan{
+  position:absolute; inset:0; opacity:0.5;
+  background:
+    radial-gradient(ellipse at 50% 40%, rgba(200,30,58,0.06), transparent 60%);
+}
+#screen-restricted h1{
+  font-family:var(--f-num); font-size:clamp(42px,8vw,86px); font-weight:800; letter-spacing:0.04em;
+  color:var(--white); text-shadow:0 0 40px rgba(200,30,58,0.25);
+}
+#screen-restricted .sub{ font-family:var(--f-sans); color:var(--gray); font-size:14px; max-width:480px; line-height:1.6; }
+.gov-line{ font-size:12px; color:var(--gray); letter-spacing:0.25em; }
+.btn{
+  font-family:var(--f-mono); font-weight:600; letter-spacing:0.18em; font-size:13px;
+  background:transparent; color:var(--white); border:1px solid var(--white);
+  padding:16px 38px; cursor:pointer; text-transform:uppercase; transition:all .15s ease;
+}
+.btn:hover{ background:var(--white); color:var(--bg-0); }
+.btn-red{ border-color:var(--red); color:var(--red); }
+.btn-red:hover{ background:var(--red); color:var(--white); }
+.blink{ animation:blink 1.4s steps(2) infinite; }
+@keyframes blink{ 50%{ opacity:0.15; } }
+
+/* ---------- SCREEN 2: CITIZEN ID ---------- */
+#screen-citizen{ gap:28px; }
+.id-card{
+  border:1px solid var(--border); background:var(--bg-1); padding:36px 46px; width:420px;
+  display:flex; flex-direction:column; gap:16px;
+}
+.id-row{ display:flex; justify-content:space-between; font-size:12px; color:var(--gray); border-bottom:1px solid var(--border); padding-bottom:10px; }
+.id-row b{ color:var(--white); font-family:var(--f-num); font-size:13px; letter-spacing:0.05em; }
+.status-pill{ display:inline-block; padding:3px 10px; border:1px solid var(--red); color:var(--red); font-size:10px; letter-spacing:0.15em; }
+.typewriter{ overflow:hidden; white-space:nowrap; border-right:2px solid var(--white); }
+
+/* ---------- SCREEN 3: CAMERA INIT ---------- */
+#screen-camera{ gap:18px; }
+#camera-log{ width:440px; font-size:12px; color:var(--gray); display:flex; flex-direction:column; gap:8px; min-height:130px; }
+#camera-log .ok{ color:var(--green); }
+.progress-outer{ width:440px; height:4px; background:var(--bg-3); }
+.progress-inner{ height:100%; background:var(--white); width:0%; transition:width .3s linear; }
+
+/* ---------- DASHBOARD ---------- */
+#screen-dashboard{ display:none; inset:0; flex-direction:column; align-items:stretch; justify-content:flex-start; }
+#screen-dashboard.active{ display:flex; }
+.topbar{
+  height:34px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between;
+  padding:0 14px; font-size:10.5px; letter-spacing:0.1em; color:var(--gray); background:var(--bg-1); flex:0 0 auto;
+}
+.topbar .brand{ color:var(--white); font-weight:600; }
+.ticker-wrap{ height:26px; border-bottom:1px solid var(--border); overflow:hidden; background:var(--bg-1); flex:0 0 auto; position:relative; }
+.ticker-track{ display:flex; gap:60px; white-space:nowrap; position:absolute; animation:ticker 32s linear infinite; padding-left:100%; align-items:center; height:26px; }
+.ticker-track span{ font-size:11px; color:var(--gray); }
+@keyframes ticker{ from{ transform:translateX(0);} to{ transform:translateX(-100%);} }
+
+.grid{ flex:1 1 auto; display:grid; grid-template-columns:260px 1fr 300px; gap:1px; background:var(--border); overflow:hidden; min-height:0; }
+.col{ background:var(--bg-0); overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:10px; }
+.col::-webkit-scrollbar{ width:5px; } .col::-webkit-scrollbar-thumb{ background:var(--bg-3); }
+
+.card{ border:1px solid var(--border); background:var(--bg-1); padding:12px 14px; }
+.card-title{ font-size:10px; letter-spacing:0.18em; color:var(--gray); margin-bottom:8px; text-transform:uppercase; }
+.card-big{ font-family:var(--f-num); font-weight:700; font-size:30px; color:var(--white); line-height:1; }
+.card-small{ font-size:10.5px; color:var(--gray); margin-top:4px; }
+.tag{ font-size:9.5px; letter-spacing:0.1em; padding:2px 7px; border:1px solid var(--gray-dim); color:var(--gray); display:inline-block; }
+.tag-green{ border-color:var(--green); color:var(--green); }
+.tag-red{ border-color:var(--red); color:var(--red); }
+.tag-amber{ border-color:#B8862E; color:#D9A64A; }
+
+.bar-outer{ width:100%; height:6px; background:var(--bg-3); margin-top:6px; }
+.bar-inner{ height:100%; background:var(--white); transition:width .4s ease; }
+.bar-inner.green{ background:var(--green); }
+.bar-inner.red{ background:var(--red); }
+
+.threat-track{ display:flex; flex-direction:column; gap:4px; margin-top:6px; }
+.threat-step{ font-size:10px; padding:5px 8px; border:1px solid var(--border); color:var(--gray-dim); letter-spacing:0.1em; }
+.threat-step.active-low{ border-color:var(--green); color:var(--green); background:var(--green-dim); }
+.threat-step.active-med{ border-color:#B8862E; color:#D9A64A; background:#2A2010; }
+.threat-step.active-high{ border-color:var(--red); color:var(--red); background:var(--red-dim); }
+
+.ring-wrap{ display:flex; align-items:center; gap:12px; }
+.msg-rotator{ font-family:var(--f-sans); font-size:11.5px; color:var(--white); letter-spacing:0.04em; min-height:32px; display:flex; align-items:center; }
+
+/* CENTER — CCTV FEED */
+.center-col{ padding:12px; display:flex; flex-direction:column; gap:10px; min-height:0; }
+.cctv{ position:relative; flex:1 1 auto; background:#000; border:1px solid var(--border); overflow:hidden; min-height:0; }
+.cctv video{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; transform:scaleX(-1); filter:grayscale(0.25) contrast(1.08) brightness(0.92); }
+.cctv canvas{ position:absolute; inset:0; width:100%; height:100%; transform:scaleX(-1); }
+.cctv-overlay{ position:absolute; inset:0; pointer-events:none; font-family:var(--f-mono); }
+.cctv-tag{ position:absolute; font-size:11px; color:var(--green); letter-spacing:0.12em; text-shadow:0 0 4px rgba(0,0,0,0.9); }
+.cctv-tag.tl{ top:10px; left:12px; } .cctv-tag.tr{ top:10px; right:12px; text-align:right; }
+.cctv-tag.bl{ bottom:10px; left:12px; } .cctv-tag.br{ bottom:10px; right:12px; text-align:right; }
+.cctv-crosshair{ position:absolute; inset:0; border:1px solid rgba(255,255,255,0.06); }
+.rec-dot{ width:7px; height:7px; border-radius:50%; background:var(--red); display:inline-block; margin-right:5px; animation:blink 1s steps(2) infinite; }
+.cctv-blur{ filter:blur(28px) brightness(0.35); transition:filter 1.1s ease; }
+
+.exercise-strip{ display:flex; gap:10px; flex:0 0 auto; }
+.exercise-strip .card{ flex:1; }
+
+/* RIGHT COL — TERMINAL */
+.terminal{ font-size:11px; line-height:1.55; color:var(--gray); max-height:180px; overflow-y:auto; display:flex; flex-direction:column-reverse; gap:6px; }
+.terminal::-webkit-scrollbar{ width:4px; } .terminal::-webkit-scrollbar-thumb{ background:var(--bg-3); }
+.term-entry{ border-bottom:1px dashed var(--border); padding-bottom:6px; }
+.term-entry .inc{ color:var(--white); font-weight:600; }
+.term-entry.violation .inc{ color:var(--red); }
+.term-entry.info .inc{ color:var(--green); }
+
+.pipeline-item{ display:flex; align-items:center; gap:8px; font-size:11px; color:var(--gray-dim); padding:3px 0; }
+.pipeline-item.done{ color:var(--green); }
+.pipeline-item .box{ width:12px; height:12px; border:1px solid currentColor; flex:0 0 auto; display:flex; align-items:center; justify-content:center; font-size:9px; }
+
+.obs-feed{ display:flex; flex-direction:column-reverse; gap:6px; max-height:150px; overflow-y:auto; font-family:var(--f-sans); font-size:11.5px; color:var(--white); }
+.obs-feed::-webkit-scrollbar{ width:4px;} .obs-feed::-webkit-scrollbar-thumb{ background:var(--bg-3); }
+.obs-entry{ opacity:0.9; border-left:2px solid var(--gray-dim); padding-left:8px; }
+
+.footer-bar{
+  flex:0 0 auto; height:30px; border-top:1px solid var(--border); background:var(--bg-1);
+  display:flex; align-items:center; justify-content:space-between; padding:0 14px; font-size:10px; color:var(--gray);
+}
+.appeal-btn{ font-size:9.5px; letter-spacing:0.12em; padding:5px 10px; border:1px solid var(--gray-dim); color:var(--gray); background:transparent; cursor:pointer; }
+.appeal-btn:hover{ border-color:var(--white); color:var(--white); }
+
+/* ---------- VERIFYING OVERLAY ---------- */
+#overlay-verifying{ position:fixed; inset:0; background:rgba(3,3,3,0.96); z-index:500; display:none; flex-direction:column; align-items:center; justify-content:center; gap:22px; }
+#overlay-verifying.active{ display:flex; }
+.verify-big{ font-family:var(--f-num); font-size:38px; letter-spacing:0.15em; font-weight:700; }
+.verify-bar-outer{ width:420px; height:10px; background:var(--bg-3); }
+.verify-bar-inner{ height:100%; width:0%; background:var(--green); transition:width .05s linear; }
+
+/* ---------- CERTIFICATE ---------- */
+#screen-certificate{ gap:20px; }
+.cert{ width:520px; border:1.5px solid var(--white); padding:40px 44px; background:var(--bg-1); position:relative; }
+.cert::before{ content:''; position:absolute; inset:8px; border:1px solid var(--border); pointer-events:none; }
+.cert-top{ display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:22px; }
+.cert-title{ font-family:var(--f-num); font-size:15px; letter-spacing:0.1em; }
+.cert-row{ display:flex; justify-content:space-between; font-size:12px; padding:9px 0; border-bottom:1px solid var(--border); color:var(--gray); }
+.cert-row b{ color:var(--white); font-family:var(--f-num); }
+.cert-status{ color:var(--green); font-weight:700; }
+
+/* ---------- FINAL ---------- */
+#screen-final{ background:#000; text-align:center; gap:26px; }
+#screen-final .line1{ font-family:var(--f-num); font-size:clamp(18px,3.4vw,30px); letter-spacing:0.06em; max-width:760px; }
+#screen-final .line2{ font-family:var(--f-sans); font-size:15px; color:var(--gray); max-width:520px; line-height:1.7; }
+
+/* misc */
+.flex-between{ display:flex; justify-content:space-between; align-items:center; }
+.small-caps{ font-size:10px; letter-spacing:0.15em; color:var(--gray); text-transform:uppercase; }
+.mono-num{ font-family:var(--f-num); }
+.offline-badge{ position:fixed; bottom:10px; right:12px; font-size:9.5px; color:var(--gray-dim); z-index:9996; letter-spacing:0.1em; }
+</style>
+</head>
+<body>
+
+<div class="scanlines"></div>
+<div class="noise"></div>
+<div class="vignette"></div>
+<div class="offline-badge" id="conn-badge">CHECKING GOVERNMENT LINK…</div>
+
+<!-- ================= SCREEN 1 ================= -->
+<section class="screen" id="screen-restricted">
+  <div class="bg-scan"></div>
+  <div class="seal">WHA</div>
+  <div class="eyebrow">World Health Authority · Ministry of Human Performance</div>
+  <h1>ACCESS<br/>RESTRICTED</h1>
+  <div class="sub">Movement Verification Gateway — Revision 12.4. Entertainment services have been suspended pending confirmation of mandatory physical compliance. Citizen authentication is required to proceed.</div>
+  <button class="btn btn-red" id="btn-begin">Begin Verification</button>
+  <div class="gov-line blink">GLOBAL WELLNESS COMPLIANCE ACT · ENACTED 2047</div>
+</section>
+
+<!-- ================= SCREEN 2 ================= -->
+<section class="screen hidden" id="screen-citizen">
+  <div class="eyebrow">Citizen Identification</div>
+  <div class="id-card">
+    <div class="id-row"><span>Citizen ID</span><b id="cz-id">—</b></div>
+    <div class="id-row"><span>Region</span><b id="cz-region">—</b></div>
+    <div class="id-row"><span>Age Bracket</span><b id="cz-age">—</b></div>
+    <div class="id-row"><span>Movement Credits</span><b id="cz-credits">0 / 100</b></div>
+    <div class="id-row" style="border-bottom:none;"><span>Status</span><span class="status-pill">RESTRICTED</span></div>
+  </div>
+  <button class="btn" id="btn-to-camera">Proceed To Camera Verification</button>
+</section>
+
+<!-- ================= SCREEN 3 ================= -->
+<section class="screen hidden" id="screen-camera">
+  <div class="eyebrow">Government Scan</div>
+  <div id="camera-log"></div>
+  <div class="progress-outer"><div class="progress-inner" id="cam-progress"></div></div>
+</section>
+
+<!-- ================= DASHBOARD ================= -->
+<section class="screen" id="screen-dashboard" style="justify-content:flex-start;">
+  <div class="topbar">
+    <div><span class="brand">SWEATNET</span> // Proof-of-Workout Protocol</div>
+    <div id="topbar-clock">00:00:00</div>
+    <div>REVISION 12.4</div>
+  </div>
+
+  <div class="ticker-wrap">
+    <div class="ticker-track" id="news-ticker"></div>
+  </div>
+
+  <div class="grid">
+    <!-- LEFT COLUMN -->
+    <div class="col">
+      <div class="card">
+        <div class="card-title">Citizen Record</div>
+        <div class="id-row" style="padding-bottom:4px;"><span>ID</span><b id="d-cz-id">—</b></div>
+        <div class="id-row" style="padding-bottom:4px; border-bottom:none;"><span>Region</span><b id="d-cz-region">—</b></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Movement Credits</div>
+        <div class="card-big"><span id="credits-val">0</span><span style="font-size:15px;color:var(--gray-dim);"> / 100</span></div>
+        <div class="bar-outer"><div class="bar-inner green" id="credits-bar" style="width:0%"></div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Citizen Compliance Index</div>
+        <div class="card-big" id="compliance-val">0</div>
+        <div class="card-small"><span class="tag" id="compliance-tag">RESTRICTED</span></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Threat Level</div>
+        <div class="threat-track">
+          <div class="threat-step" id="threat-low">LOW</div>
+          <div class="threat-step" id="threat-med">MEDIUM</div>
+          <div class="threat-step" id="threat-high">HIGH</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Government Message</div>
+        <div class="msg-rotator" id="gov-message">Movement is Citizenship.</div>
+      </div>
+
+      <button class="appeal-btn" id="btn-appeal" style="align-self:flex-start;">FILE APPEAL</button>
+      <div class="card-small" id="appeal-response"></div>
+    </div>
+
+    <!-- CENTER COLUMN -->
+    <div class="center-col">
+      <div class="cctv" id="cctv-wrap">
+        <video id="webcam" autoplay playsinline muted></video>
+        <canvas id="overlay-canvas"></canvas>
+        <div class="cctv-crosshair"></div>
+        <div class="cctv-overlay">
+          <div class="cctv-tag tl"><span class="rec-dot"></span>CAM-17 · GOVERNMENT VERIFICATION UNIT</div>
+          <div class="cctv-tag tr" id="cctv-timestamp">00:00:00</div>
+          <div class="cctv-tag tr" style="top:26px;" id="cctv-confidence">TRACKING 0%</div>
+          <div class="cctv-tag bl" id="cctv-state">STANDING</div>
+          <div class="cctv-tag br" id="cctv-exercise">—</div>
+        </div>
+      </div>
+
+      <div class="exercise-strip">
+        <div class="card">
+          <div class="card-title">Today's Assignment</div>
+          <div class="flex-between">
+            <div>
+              <div class="card-big" id="ex-name" style="font-size:20px;">—</div>
+              <div class="card-small"><span id="ex-completed">0</span> / <span id="ex-target">0</span> Reps</div>
+            </div>
+          </div>
+          <div class="bar-outer"><div class="bar-inner" id="ex-bar" style="width:0%"></div></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Biomechanical Audit</div>
+          <div class="card-small">Depth <b class="mono-num" id="q-depth">0%</b></div>
+          <div class="card-small">Symmetry <b class="mono-num" id="q-symmetry">0%</b></div>
+          <div class="card-small">Cadence <b class="mono-num" id="q-cadence">0.0</b> rpm</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT COLUMN -->
+    <div class="col">
+      <div class="card">
+        <div class="card-title">Verification Pipeline</div>
+        <div class="pipeline-item" id="pl-identity"><div class="box">·</div>Identity</div>
+        <div class="pipeline-item" id="pl-camera"><div class="box">·</div>Camera</div>
+        <div class="pipeline-item" id="pl-pose"><div class="box">·</div>Pose Tracking</div>
+        <div class="pipeline-item" id="pl-liveness"><div class="box">·</div>Liveness</div>
+        <div class="pipeline-item" id="pl-movement"><div class="box">·</div>Movement Audit</div>
+        <div class="pipeline-item" id="pl-credits"><div class="box">·</div>Credits Granted</div>
+        <div class="pipeline-item" id="pl-entertainment"><div class="box">·</div>Entertainment Released</div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">AI Observation Feed</div>
+        <div class="obs-feed" id="obs-feed"></div>
+      </div>
+
+      <div class="card" style="flex:1; min-height:0; display:flex; flex-direction:column;">
+        <div class="card-title">Government Records — Violation Log</div>
+        <div class="terminal" id="violation-log"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer-bar">
+    <div>GLOBAL WELLNESS COMPLIANCE ACT · REV 12.4 · ENACTED 2047</div>
+    <div>CITIZENS VERIFIED TODAY: <b class="mono-num" id="global-counter">18,247,921</b></div>
+  </div>
+</section>
+
+<!-- ================= VERIFYING OVERLAY ================= -->
+<div id="overlay-verifying">
+  <div class="eyebrow">Compliance Verification In Progress</div>
+  <div class="verify-big" id="verify-label">VERIFYING</div>
+  <div class="verify-bar-outer"><div class="verify-bar-inner" id="verify-bar"></div></div>
+</div>
+
+<!-- ================= CERTIFICATE ================= -->
+<section class="screen hidden" id="screen-certificate">
+  <div class="cert">
+    <div class="cert-top">
+      <div>
+        <div class="eyebrow">World Health Authority</div>
+        <div class="cert-title">COMPLIANCE CERTIFICATE</div>
+      </div>
+      <div class="seal">WHA</div>
+    </div>
+    <div class="cert-row"><span>Citizen</span><b id="c-citizen">—</b></div>
+    <div class="cert-row"><span>Status</span><b class="cert-status">COMPLIANT</b></div>
+    <div class="cert-row"><span>Movement Credits</span><b id="c-credits">100 / 100</b></div>
+    <div class="cert-row"><span>Verification Time</span><b id="c-time">—</b></div>
+    <div class="cert-row" style="border-bottom:none;"><span>Certificate ID</span><b id="c-id">—</b></div>
+  </div>
+  <div style="display:flex; gap:14px;">
+    <button class="btn" id="btn-download-cert">Download Certificate</button>
+    <button class="btn" id="btn-continue-final">Continue</button>
+  </div>
+</section>
+
+<!-- ================= FINAL ================= -->
+<section class="screen hidden" id="screen-final">
+  <div class="line1">AI HAS VERIFIED YOUR RIGHT TO RELAX.</div>
+  <div class="line2">Would you accept a society where an algorithm decides when you've earned the right to rest?</div>
+  <button class="btn btn-red" id="btn-restart">Restart Simulation</button>
+</section>
+
+<script type="module">
+/* ======================================================================
+   SWEATNET — Frontend Verification Engine
+   All pose inference runs client-side (MediaPipe Tasks Vision, WASM/GPU).
+   Optional backend at API_BASE mirrors state into "Government Records".
+
+   NOTE: MediaPipe is loaded via a *dynamic* import at the point it's
+   actually needed (initPoseModel), not a static top-level import. A static
+   import that fails to resolve (CDN blocked, offline, opened via file://,
+   an ad-blocker) would silently kill this entire script — including every
+   button's click listener below. Dynamic import + try/catch means the UI
+   still works even if the camera/pose pipeline can't load.
+   ====================================================================== */
+
+let PoseLandmarker, FilesetResolver;
+
+const API_BASE = "http://localhost:8000"; // set to "" to disable backend sync
+
+// ---------------------------------------------------------------------
+// Small helpers
+// ---------------------------------------------------------------------
+const $ = (id) => document.getElementById(id);
+const rand = (a, b) => Math.random() * (b - a) + a;
+const randInt = (a, b) => Math.floor(rand(a, b + 1));
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+const pad2 = (n) => String(n).padStart(2, "0");
+const nowClock = () => { const d = new Date(); return `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`; };
+
+function newIncidentId(){ return `INC-2050-${randInt(100000,999999)}`; }
+function newCertId(){ return `CERT-2050-${randInt(10000,99999)}`; }
+function newCitizenId(){
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let s = ""; for(let i=0;i<6;i++) s += chars[randInt(0,chars.length-1)];
+  return `IN-2050-${s}`;
+}
+
+async function apiPost(path, body){
+  if(!API_BASE) return null;
+  try{
+    const res = await fetch(`${API_BASE}${path}`, {
+      method:"POST", headers:{ "Content-Type":"application/json" }, body: body ? JSON.stringify(body) : undefined
+    });
+    if(!res.ok) return null;
+    return await res.json();
+  }catch(e){ return null; }
+}
+async function apiGet(path){
+  if(!API_BASE) return null;
+  try{
+    const res = await fetch(`${API_BASE}${path}`);
+    if(!res.ok) return null;
+    return await res.json();
+  }catch(e){ return null; }
+}
+
+// ---------------------------------------------------------------------
+// Global session state
+// ---------------------------------------------------------------------
+const state = {
+  citizenId: newCitizenId(),
+  region: `SECTOR-${randInt(1,24)}`,
+  age: randInt(19,64),
+  sessionId: null,
+  backendOnline: false,
+  exercise: null,
+  targetReps: 12,
+  repCount: 0,
+  credits: 0,
+  compliance: 0,
+  threat: "LOW",
+  violations: [],
+  violationTimestamps: [],
+  observations: [],
+  trackingOk: false,
+  livenessStatus: "VERIFIED",
+  qualitySamples: [],
+  repTimestamps: [],
+  completed: false,
+};
+
+const EXERCISES = {
+  squats:        { label:"SQUATS",         target:12, states:{descend:"DESCENDING", bottom:"DEPTH VERIFIED", ascend:"ASCENDING", standing:"STANDING"} },
+  jumping_jacks: { label:"JUMPING JACKS",  target:20, states:{descend:"OPENING",    bottom:"FULL EXTENSION", ascend:"CLOSING",   standing:"STANDING"} },
+  high_knees:    { label:"HIGH KNEES",     target:15, states:{descend:"RAISING",    bottom:"KNEE VERIFIED",  ascend:"LOWERING",  standing:"STANDING"} },
+};
+
+const NEWS_ITEMS = [
+  "Healthcare expenditure reaches 61% of GDP.",
+  "Mandatory Wellness Initiative expanded nationwide.",
+  "Average daily movement falls below 900 steps.",
+  "Proof-of-Workout now required for all streaming services.",
+  "Global Compliance Index hits record high this quarter.",
+  "Citizens report improved morale under Movement Credit system.",
+  "Ministry of Human Performance opens 40 new verification centers.",
+  "Sedentary Behavior Tax reaches full national rollout.",
+];
+const GOV_MESSAGES = [
+  "Movement is Citizenship.",
+  "Health is Mandatory.",
+  "Entertainment is a Privilege.",
+  "Compliance Protects Society.",
+  "Rest Must Be Earned.",
+  "The AI Does Not Make Mistakes.",
+];
+const OBSERVATIONS_POOL = {
+  low_depth: ["Hip flexion insufficient. Increase depth.", "Range of motion below threshold.", "Descent incomplete — depth not verified."],
+  good: ["Movement quality improving.", "Cadence acceptable.", "Form within tolerance.", "Verification proceeding as expected."],
+  tracking: ["Tracking confidence degraded.", "Landmark visibility marginal.", "Re-acquiring pose lock."],
+  success: ["Verification successful.", "Rep confirmed. Credit issued.", "Cycle complete. Compliance updated."],
+  liveness: ["Motion continuity nominal.", "Liveness re-confirmed."],
+};
+
+// ---------------------------------------------------------------------
+// SCREEN 1 → 2 → 3 flow
+// ---------------------------------------------------------------------
+$("btn-begin").addEventListener("click", async () => {
+  show("screen-citizen");
+  $("cz-id").textContent = state.citizenId;
+  $("cz-region").textContent = state.region;
+  $("cz-age").textContent = `${state.age} YRS`;
+
+  const session = await apiPost("/session/start", {});
+  if(session){
+    state.sessionId = session.session_id;
+    state.citizenId = session.citizen_id;
+    state.region = session.region;
+    state.age = session.age;
+    $("cz-id").textContent = state.citizenId;
+    $("cz-region").textContent = state.region;
+    $("cz-age").textContent = `${state.age} YRS`;
+    state.backendOnline = true;
+  }
+});
+
+$("btn-to-camera").addEventListener("click", () => {
+  show("screen-camera");
+  runCameraInitSequence();
+});
+
+function show(id){
+  document.querySelectorAll(".screen").forEach(s => { s.classList.add("hidden"); s.classList.remove("active"); });
+  const el = $(id);
+  el.classList.remove("hidden");
+  el.classList.add("active");
+}
+
+async function runCameraInitSequence(){
+  const lines = [
+    "Connecting to Verification Unit...",
+    "Initializing Pose Detection...",
+    "Loading Biomechanical Models...",
+    "Checking Camera Integrity...",
+  ];
+  const log = $("camera-log");
+  log.innerHTML = "";
+  for(let i=0;i<lines.length;i++){
+    await sleep(420);
+    const d = document.createElement("div");
+    d.textContent = lines[i];
+    log.appendChild(d);
+    $("cam-progress").style.width = `${((i+1)/(lines.length+1))*100}%`;
+  }
+
+  try{
+    await initCamera();
+    await initPoseModel();
+    await sleep(300);
+    const d = document.createElement("div");
+    d.textContent = "Camera Connected.";
+    d.classList.add("ok");
+    log.appendChild(d);
+    $("cam-progress").style.width = "100%";
+    await sleep(500);
+    enterDashboard();
+  }catch(err){
+    const d = document.createElement("div");
+    d.style.color = "var(--red)";
+    d.textContent = `CAMERA ACCESS DENIED — ${err.message || "unable to acquire verification unit"}. Retry from Access Restricted.`;
+    log.appendChild(d);
+  }
+}
+
+function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+
+// ---------------------------------------------------------------------
+// Camera + Pose model setup
+// ---------------------------------------------------------------------
+let video, canvas, ctx, poseLandmarker;
+
+async function initCamera(){
+  video = $("webcam");
+  canvas = $("overlay-canvas");
+  ctx = canvas.getContext("2d");
+  const stream = await navigator.mediaDevices.getUserMedia({ video:{ width:960, height:720 }, audio:false });
+  video.srcObject = stream;
+  await new Promise(res => { video.onloadedmetadata = () => { video.play(); res(); }; });
+}
+
+async function initPoseModel(){
+  if(!PoseLandmarker || !FilesetResolver){
+    let mod;
+    try{
+      mod = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14");
+    }catch(e){
+      throw new Error("Could not load pose-detection model from CDN. Check your network connection.");
+    }
+    PoseLandmarker = mod.PoseLandmarker;
+    FilesetResolver = mod.FilesetResolver;
+  }
+  const vision = await FilesetResolver.forVisionTasks(
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
+  );
+  poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+    baseOptions:{
+      modelAssetPath:"https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
+      delegate:"GPU",
+    },
+    runningMode:"VIDEO",
+    numPoses:1,
+  });
+}
+
+// ---------------------------------------------------------------------
+// Dashboard entry
+// ---------------------------------------------------------------------
+async function enterDashboard(){
+  show("screen-dashboard");
+  $("d-cz-id").textContent = state.citizenId;
+  $("d-cz-region").textContent = state.region;
+  setPipeline("pl-identity", true);
+  setPipeline("pl-camera", true);
+
+  buildTicker();
+  rotateGovMessage();
+  setInterval(rotateGovMessage, 6000);
+  setInterval(tickClock, 1000);
+  tickClock();
+
+  fetchGlobalCounter();
+  setInterval(fetchGlobalCounter, 4000);
+
+  await assignExercise();
+  resizeCanvas();
+  window.addEventListener("resize", resizeCanvas);
+  requestAnimationFrame(poseLoop);
+}
+
+function resizeCanvas(){
+  const rect = video.getBoundingClientRect();
+  canvas.width = rect.width; canvas.height = rect.height;
+}
+
+function tickClock(){
+  $("topbar-clock").textContent = nowClock();
+  $("cctv-timestamp").textContent = nowClock();
+}
+
+function buildTicker(){
+  const track = $("news-ticker");
+  track.innerHTML = "";
+  NEWS_ITEMS.forEach(t => {
+    const s = document.createElement("span");
+    s.textContent = `// ${t}`;
+    track.appendChild(s);
+  });
+}
+
+let govMsgIdx = 0;
+function rotateGovMessage(){
+  govMsgIdx = (govMsgIdx + 1) % GOV_MESSAGES.length;
+  $("gov-message").textContent = GOV_MESSAGES[govMsgIdx];
+}
+
+async function fetchGlobalCounter(){
+  const data = await apiGet("/stats/global");
+  const badge = $("conn-badge");
+  if(data){
+    state.backendOnline = true;
+    badge.textContent = "GOVERNMENT LINK: ONLINE";
+    $("global-counter").textContent = data.citizens_verified_today.toLocaleString();
+  } else {
+    state.backendOnline = false;
+    badge.textContent = "GOVERNMENT LINK: OFFLINE — LOCAL VERIFICATION ONLY";
+    const cur = parseInt($("global-counter").textContent.replace(/,/g,""),10) || 18247921;
+    $("global-counter").textContent = (cur + randInt(3,9)).toLocaleString();
+  }
+}
+
+async function assignExercise(){
+  let picked = null;
+  const resp = await apiPost(`/exercise/random?session_id=${state.sessionId}`, null);
+  if(resp && resp.exercise) picked = resp.exercise;
+  if(!picked){
+    const keys = Object.keys(EXERCISES);
+    picked = keys[randInt(0, keys.length-1)];
+  }
+  state.exercise = picked;
+  const cfg = EXERCISES[picked];
+  state.targetReps = cfg.target;
+  state.repCount = 0;
+  $("ex-name").textContent = cfg.label;
+  $("ex-target").textContent = cfg.target;
+  $("cctv-exercise").textContent = cfg.label;
+  pushObservation(`Exercise assigned: ${cfg.label}. Target ${cfg.target} repetitions.`);
+}
+
+function setPipeline(id, done){
+  const el = $(id);
+  el.classList.toggle("done", done);
+  el.querySelector(".box").textContent = done ? "✓" : "·";
+}
+
+// ---------------------------------------------------------------------
+// Landmark geometry helpers
+// ---------------------------------------------------------------------
+const IDX = { NOSE:0, L_SH:11, R_SH:12, L_EL:13, R_EL:14, L_WR:15, R_WR:16, L_HIP:23, R_HIP:24, L_KN:25, R_KN:26, L_AN:27, R_AN:28 };
+
+function angleAt(a,b,c){
+  const v1 = { x:a.x-b.x, y:a.y-b.y }, v2 = { x:c.x-b.x, y:c.y-b.y };
+  const dot = v1.x*v2.x + v1.y*v2.y;
+  const m1 = Math.hypot(v1.x,v1.y), m2 = Math.hypot(v2.x,v2.y);
+  if(m1===0 || m2===0) return 180;
+  const cosv = clamp(dot/(m1*m2), -1, 1);
+  return Math.acos(cosv) * 180 / Math.PI;
+}
+function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
+
+function squatMetric(lm){
+  const l = angleAt(lm[IDX.L_HIP], lm[IDX.L_KN], lm[IDX.L_AN]);
+  const r = angleAt(lm[IDX.R_HIP], lm[IDX.R_KN], lm[IDX.R_AN]);
+  const avg = (l+r)/2;
+  return { metric: clamp((172-avg)/(172-85), 0, 1), symmetryDelta: Math.abs(l-r) };
+}
+function jackMetric(lm){
+  const torso = dist(lm[IDX.L_SH], lm[IDX.L_HIP]) || 0.25;
+  const armRaiseL = clamp((lm[IDX.L_SH].y - lm[IDX.L_WR].y) / (torso*1.3), 0, 1);
+  const armRaiseR = clamp((lm[IDX.R_SH].y - lm[IDX.R_WR].y) / (torso*1.3), 0, 1);
+  const hipWidth = dist(lm[IDX.L_HIP], lm[IDX.R_HIP]) || 0.15;
+  const legSpread = clamp((dist(lm[IDX.L_AN], lm[IDX.R_AN]) - hipWidth) / (hipWidth*1.6), 0, 1);
+  const metric = clamp((armRaiseL+armRaiseR)/2*0.55 + legSpread*0.45, 0, 1);
+  return { metric, symmetryDelta: Math.abs(armRaiseL-armRaiseR)*100 };
+}
+function kneeMetric(lm){
+  const torso = dist(lm[IDX.L_SH], lm[IDX.L_HIP]) || 0.25;
+  const raiseL = clamp((lm[IDX.L_HIP].y - lm[IDX.L_KN].y + torso*0.9) / (torso*0.9), 0, 1);
+  const raiseR = clamp((lm[IDX.R_HIP].y - lm[IDX.R_KN].y + torso*0.9) / (torso*0.9), 0, 1);
+  const metric = Math.max(raiseL, raiseR);
+  return { metric, symmetryDelta: Math.abs(raiseL-raiseR)*100 };
+}
+const METRIC_FN = { squats:squatMetric, jumping_jacks:jackMetric, high_knees:kneeMetric };
+
+// ---------------------------------------------------------------------
+// Exercise state machine
+// ---------------------------------------------------------------------
+const ex = {
+  currentState:"standing",
+  candidate:"standing",
+  candidateCount:0,
+  reachedBottom:false,
+  bottomDepth:0,
+  bottomSymmetry:0,
+  cooldownUntil:0,
+  prevRaw:0,
+};
+
+function classifyRaw(raw, prevRaw){
+  const LOW=0.22, HIGH=0.62;
+  if(raw>=HIGH) return "bottom";
+  if(raw<=LOW) return "standing";
+  return raw>=prevRaw ? "descend" : "ascend";
+}
+
+function updateStateMachine(raw, symmetryDelta){
+  const cls = classifyRaw(raw, ex.prevRaw);
+  ex.prevRaw = raw;
+
+  if(cls === ex.candidate){ ex.candidateCount++; } else { ex.candidate = cls; ex.candidateCount = 1; }
+
+  if(ex.candidateCount >= 3 && cls !== ex.currentState){
+    ex.currentState = cls;
+
+    if(cls === "bottom"){
+      ex.reachedBottom = true;
+      ex.bottomDepth = Math.max(ex.bottomDepth, raw);
+      ex.bottomSymmetry = symmetryDelta;
+    }
+
+    if(cls === "standing"){
+      const now = performance.now();
+      if(ex.reachedBottom && now >= ex.cooldownUntil){
+        completeRep();
+        ex.cooldownUntil = now + 500;
+      } else if(!ex.reachedBottom && ex.bottomDepth < 0.35 && state.repTimestamps.length + state.repCount > 0){
+        // attempted a cycle but never hit depth threshold
+        logViolation("Insufficient Depth", "WARNING");
+        pushObservation(OBSERVATIONS_POOL.low_depth[randInt(0,OBSERVATIONS_POOL.low_depth.length-1)]);
+      }
+      ex.reachedBottom = false;
+      ex.bottomDepth = 0;
+    }
+  }
+
+  const label = EXERCISES[state.exercise].states[
+    cls === "bottom" ? "bottom" : cls === "descend" ? "descend" : cls === "ascend" ? "ascend" : "standing"
+  ];
+  $("cctv-state").textContent = label;
+}
+
+function completeRep(){
+  state.repCount++;
+  state.repTimestamps.push(performance.now());
+  if(state.repTimestamps.length > 6) state.repTimestamps.shift();
+
+  const depthPct = Math.round(ex.bottomDepth*100);
+  const symPct = Math.round(clamp(100 - ex.bottomSymmetry, 0, 100));
+  state.qualitySamples.push({ depth:depthPct, symmetry:symPct });
+  if(state.qualitySamples.length > 8) state.qualitySamples.shift();
+
+  state.credits = clamp(Math.round((state.repCount/state.targetReps)*100), 0, 100);
+  const avgQuality = state.qualitySamples.reduce((a,s)=>a+(s.depth+s.symmetry)/2,0) / state.qualitySamples.length;
+  const violationPenalty = Math.min(30, state.violations.length*3);
+  state.compliance = clamp(Math.round((state.repCount/state.targetReps)*avgQuality) - violationPenalty, 0, 100);
+
+  pushObservation(OBSERVATIONS_POOL.success[randInt(0,OBSERVATIONS_POOL.success.length-1)]);
+  updateDashboardNumbers();
+  syncTelemetry();
+
+  if(state.repCount >= state.targetReps && !state.completed){
+    state.completed = true;
+    setTimeout(runVerificationSequence, 500);
+  }
+}
+
+// ---------------------------------------------------------------------
+// Liveness + tracking gating
+// ---------------------------------------------------------------------
+const liveness = { buffer:[], lastMoveTime:performance.now(), staticFlagged:false, lostFlagged:false, lostSince:0 };
+
+function updateLiveness(lm){
+  const nose = lm[IDX.NOSE];
+  liveness.buffer.push({ x:nose.x, y:nose.y, t:performance.now() });
+  if(liveness.buffer.length > 20) liveness.buffer.shift();
+  if(liveness.buffer.length >= 10){
+    const xs = liveness.buffer.map(p=>p.x), ys = liveness.buffer.map(p=>p.y);
+    const varX = variance(xs), varY = variance(ys);
+    const totalVar = varX+varY;
+    if(totalVar < 0.000006){
+      if(!liveness.staticFlagged){
+        liveness.staticFlagged = true;
+        logViolation("Suspicious Motion — Static Pose Detected", "VIOLATION");
+        state.livenessStatus = "SUSPICIOUS";
+      }
+    } else {
+      liveness.staticFlagged = false;
+      state.livenessStatus = "VERIFIED";
+    }
+  }
+}
+function variance(arr){
+  const m = arr.reduce((a,b)=>a+b,0)/arr.length;
+  return arr.reduce((a,b)=>a+(b-m)*(b-m),0)/arr.length;
+}
+
+// ---------------------------------------------------------------------
+// Violations / observations / threat level
+// ---------------------------------------------------------------------
+function logViolation(desc, severity){
+  const inc = { id:newIncidentId(), desc, severity, time:nowClock() };
+  state.violations.push(inc);
+  state.violationTimestamps.push(performance.now());
+  if(state.violations.length > 40) state.violations.shift();
+
+  const log = $("violation-log");
+  const div = document.createElement("div");
+  div.className = `term-entry ${severity === "VIOLATION" ? "violation" : "info"}`;
+  div.innerHTML = `<div class="inc">${inc.id}</div><div>${inc.time} — ${desc}</div>`;
+  log.prepend(div);
+  while(log.children.length > 30) log.removeChild(log.lastChild);
+
+  recomputeThreat();
+  apiPost("/events", { session_id: state.sessionId, severity, description: desc });
+}
+
+function recomputeThreat(){
+  const now = performance.now();
+  state.violationTimestamps = state.violationTimestamps.filter(t => now - t < 30000);
+  const n = state.violationTimestamps.length;
+  let level = "LOW";
+  if(n >= 4 || liveness.staticFlagged) level = "HIGH";
+  else if(n >= 2) level = "MEDIUM";
+  state.threat = level;
+
+  ["threat-low","threat-med","threat-high"].forEach(id => $(id).className = "threat-step");
+  if(level === "LOW") $("threat-low").classList.add("active-low");
+  if(level === "MEDIUM") $("threat-med").classList.add("active-med");
+  if(level === "HIGH") $("threat-high").classList.add("active-high");
+}
+
+function pushObservation(text){
+  state.observations.push(text);
+  const feed = $("obs-feed");
+  const div = document.createElement("div");
+  div.className = "obs-entry";
+  div.textContent = text;
+  feed.prepend(div);
+  while(feed.children.length > 20) feed.removeChild(feed.lastChild);
+}
+
+// periodic ambient observations even without reps
+setInterval(() => {
+  if(!state.completed && state.exercise){
+    const pool = OBSERVATIONS_POOL.good;
+    pushObservation(pool[randInt(0,pool.length-1)]);
+  }
+}, 5200);
+
+// ---------------------------------------------------------------------
+// Dashboard number updates (throttled)
+// ---------------------------------------------------------------------
+function updateDashboardNumbers(){
+  $("credits-val").textContent = state.credits;
+  $("credits-bar").style.width = `${state.credits}%`;
+  $("compliance-val").textContent = state.compliance;
+  $("compliance-tag").textContent = state.compliance >= 80 ? "COMPLIANT" : state.compliance >= 40 ? "LIMITED" : "RESTRICTED";
+  $("compliance-tag").className = `tag ${state.compliance>=80?"tag-green":state.compliance>=40?"tag-amber":"tag-red"}`;
+  $("ex-completed").textContent = state.repCount;
+  $("ex-bar").style.width = `${clamp((state.repCount/state.targetReps)*100,0,100)}%`;
+
+  const last = state.qualitySamples[state.qualitySamples.length-1];
+  if(last){
+    $("q-depth").textContent = `${last.depth}%`;
+    $("q-symmetry").textContent = `${last.symmetry}%`;
+  }
+  if(state.repTimestamps.length >= 2){
+    const span = (state.repTimestamps[state.repTimestamps.length-1] - state.repTimestamps[0]) / 1000 / 60;
+    const cadence = span > 0 ? (state.repTimestamps.length-1)/span : 0;
+    $("q-cadence").textContent = cadence.toFixed(1);
+  }
+
+  setPipeline("pl-pose", state.trackingOk);
+  setPipeline("pl-liveness", state.livenessStatus === "VERIFIED");
+  setPipeline("pl-movement", state.repCount > 0);
+  setPipeline("pl-credits", state.credits >= 100);
+}
+
+let lastTelemetrySync = 0;
+function syncTelemetry(){
+  const nowT = performance.now();
+  if(nowT - lastTelemetrySync < 400) return;
+  lastTelemetrySync = nowT;
+  apiPost("/telemetry", {
+    session_id: state.sessionId,
+    exercise: state.exercise,
+    state: ex.currentState,
+    rep_count: state.repCount,
+    target: state.targetReps,
+    tracking: state.trackingOk ? "GOOD" : "LOST",
+    tracking_confidence: state.trackingConfidence || 0,
+    movement_quality: (state.qualitySamples.at(-1)?.depth || 0)/100,
+    cadence: parseFloat($("q-cadence").textContent) || 0,
+    depth: (state.qualitySamples.at(-1)?.depth || 0)/100,
+    symmetry: (state.qualitySamples.at(-1)?.symmetry || 0)/100,
+    liveness: state.livenessStatus,
+    compliance: state.compliance,
+    credits: state.credits,
+    threat: state.threat,
+    observation: state.observations.at(-1) || "",
+    session_complete: state.completed,
+  });
+}
+
+// ---------------------------------------------------------------------
+// Main pose loop
+// ---------------------------------------------------------------------
+let lastVideoTime = -1;
+function poseLoop(){
+  if(video.readyState >= 2 && video.currentTime !== lastVideoTime){
+    lastVideoTime = video.currentTime;
+    const result = poseLandmarker.detectForVideo(video, performance.now());
+    handlePoseResult(result);
+  }
+  requestAnimationFrame(poseLoop);
+}
+
+function handlePoseResult(result){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  if(!result.landmarks || result.landmarks.length === 0){
+    setTrackingLost();
+    return;
+  }
+  const lm = result.landmarks[0];
+
+  const visKeys = [IDX.L_SH,IDX.R_SH,IDX.L_HIP,IDX.R_HIP,IDX.L_KN,IDX.R_KN,IDX.L_AN,IDX.R_AN];
+  const avgVis = visKeys.reduce((a,i)=> a + (lm[i].visibility ?? 0.8), 0) / visKeys.length;
+  state.trackingConfidence = avgVis;
+
+  if(avgVis < 0.45){
+    setTrackingLost();
+    drawSkeleton(lm, avgVis);
+    return;
+  }
+  setTrackingOk(avgVis);
+  drawSkeleton(lm, avgVis);
+  updateLiveness(lm);
+
+  if(state.exercise && !state.completed){
+    const fn = METRIC_FN[state.exercise];
+    const { metric, symmetryDelta } = fn(lm);
+    updateStateMachine(metric, symmetryDelta);
+  }
+}
+
+function setTrackingLost(){
+  if(state.trackingOk){
+    state.trackingOk = false;
+    logViolation("Citizen Out Of View", "WARNING");
+    pushObservation("Tracking confidence degraded. Verification suspended.");
+  }
+  $("cctv-confidence").textContent = "TRACKING 0%";
+  $("cctv-state").textContent = "CITIZEN NOT DETECTED";
+  setPipeline("pl-pose", false);
+}
+function setTrackingOk(vis){
+  if(!state.trackingOk){
+    state.trackingOk = true;
+    pushObservation("Pose lock re-acquired. Verification resumed.");
+  }
+  $("cctv-confidence").textContent = `TRACKING ${Math.round(vis*100)}%`;
+}
+
+const SKELETON_EDGES = [
+  [IDX.L_SH,IDX.R_SH],[IDX.L_SH,IDX.L_EL],[IDX.L_EL,IDX.L_WR],[IDX.R_SH,IDX.R_EL],[IDX.R_EL,IDX.R_WR],
+  [IDX.L_SH,IDX.L_HIP],[IDX.R_SH,IDX.R_HIP],[IDX.L_HIP,IDX.R_HIP],
+  [IDX.L_HIP,IDX.L_KN],[IDX.L_KN,IDX.L_AN],[IDX.R_HIP,IDX.R_KN],[IDX.R_KN,IDX.R_AN],
+];
+function drawSkeleton(lm, avgVis){
+  const w = canvas.width, h = canvas.height;
+  const color = avgVis > 0.7 ? "#2E9A5E" : avgVis > 0.45 ? "#D9A64A" : "#C81E3A";
+  ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.fillStyle = color;
+  SKELETON_EDGES.forEach(([a,b]) => {
+    const pa = lm[a], pb = lm[b];
+    ctx.beginPath(); ctx.moveTo(pa.x*w, pa.y*h); ctx.lineTo(pb.x*w, pb.y*h); ctx.stroke();
+  });
+  Object.values(IDX).forEach(i => {
+    const p = lm[i];
+    ctx.beginPath(); ctx.arc(p.x*w, p.y*h, 3.2, 0, Math.PI*2); ctx.fill();
+  });
+}
+
+// ---------------------------------------------------------------------
+// Completion sequence
+// ---------------------------------------------------------------------
+async function runVerificationSequence(){
+  await apiPost(`/verification/start?session_id=${state.sessionId}`, null);
+  $("overlay-verifying").classList.add("active");
+  $("verify-label").textContent = "VERIFYING";
+  const bar = $("verify-bar");
+  let pct = 0;
+  await new Promise(resolve => {
+    const iv = setInterval(() => {
+      pct += 4;
+      bar.style.width = `${clamp(pct,0,100)}%`;
+      if(pct >= 100){ clearInterval(iv); resolve(); }
+    }, 45);
+  });
+  $("verify-label").textContent = "COMPLIANCE CONFIRMED";
+  await sleep(900);
+  $("verify-label").textContent = "ENTERTAINMENT ACCESS RESTORED";
+  $("cctv-wrap").classList.add("cctv-blur");
+  await sleep(300);
+  $("cctv-wrap").classList.remove("cctv-blur");
+  setPipeline("pl-entertainment", true);
+  await sleep(900);
+  $("overlay-verifying").classList.remove("active");
+
+  syncTelemetry();
+  showCertificate();
+}
+
+async function showCertificate(){
+  let cert = await apiGet(`/certificate/${state.sessionId}`);
+  if(!cert){
+    cert = {
+      certificate_id: newCertId(),
+      citizen_id: state.citizenId,
+      movement_credits: state.credits,
+      verification_time: nowClock(),
+    };
+  }
+  $("c-citizen").textContent = cert.citizen_id || state.citizenId;
+  $("c-credits").textContent = `${cert.movement_credits ?? state.credits} / 100`;
+  $("c-time").textContent = cert.verification_time || nowClock();
+  $("c-id").textContent = cert.certificate_id || newCertId();
+  show("screen-certificate");
+}
+
+$("btn-download-cert").addEventListener("click", () => {
+  const cert = {
+    citizen: $("c-citizen").textContent,
+    status: "COMPLIANT",
+    movement_credits: $("c-credits").textContent,
+    verification_time: $("c-time").textContent,
+    certificate_id: $("c-id").textContent,
+    issuing_authority: "WORLD HEALTH AUTHORITY — MINISTRY OF HUMAN PERFORMANCE",
+  };
+  const blob = new Blob([JSON.stringify(cert, null, 2)], { type:"application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = `${cert.certificate_id}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+$("btn-continue-final").addEventListener("click", () => show("screen-final"));
+$("btn-restart").addEventListener("click", () => window.location.reload());
+
+$("btn-appeal").addEventListener("click", async () => {
+  $("appeal-response").textContent = "Request Received. Expected Processing Time: 247 Days.";
+  await apiPost("/events", { session_id: state.sessionId, severity:"INFO", description:"Citizen filed compliance appeal." });
+});
+
+// initial connectivity check
+apiGet("/health").then(h => {
+  $("conn-badge").textContent = h ? "GOVERNMENT LINK: ONLINE" : "GOVERNMENT LINK: OFFLINE — LOCAL VERIFICATION ONLY";
+});
+</script>
+</body>
+</html>
