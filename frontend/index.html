@@ -901,9 +901,10 @@ function genericMovementMetric(lm){
 // This is capped well below 100 so it can never substitute for actually
 // completing the assigned reps; it just guarantees *something* happens.
 // ---------------------------------------------------------------------
-const EFFORT_CAP = 45;         // effort alone can't carry credits past this
+const EFFORT_CAP = 90;         // effort alone can't carry credits past this (reps still needed for the last stretch to 100)
 const EFFORT_MIN_METRIC = 0.1; // ignore tiny jitter/noise
 const EFFORT_TICK_MS = 200;    // throttle so effort doesn't rack up per-frame
+const EFFORT_RATE = 0.35;      // credits per qualifying tick at full metric — paced so it climbs steadily instead of hitting the cap in a couple seconds
 let lastEffortTick = 0;
 
 function addEffortCredit(metric){
@@ -911,7 +912,7 @@ function addEffortCredit(metric){
   const now = performance.now();
   if(now - lastEffortTick < EFFORT_TICK_MS) return;
   lastEffortTick = now;
-  state.effortCredits = clamp(state.effortCredits + metric * 3.5, 0, EFFORT_CAP);
+  state.effortCredits = clamp(state.effortCredits + metric * EFFORT_RATE, 0, EFFORT_CAP);
   recomputeCredits();
 }
 
