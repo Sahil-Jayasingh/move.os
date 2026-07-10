@@ -45,7 +45,7 @@ body{ position:relative; }
 /* ---------- SCREEN 1: ACCESS RESTRICTED ---------- */
 #screen-restricted{ background:var(--bg-0); text-align:center; gap:22px; }
 #screen-restricted .bg-scan{
-  position:absolute; inset:0; opacity:0.5;
+  position:absolute; inset:0; opacity:0.5; pointer-events:none;
   background:
     radial-gradient(ellipse at 50% 40%, rgba(200,30,58,0.06), transparent 60%);
 }
@@ -399,7 +399,19 @@ body{ position:relative; }
 
 let PoseLandmarker, FilesetResolver;
 
-const API_BASE = "https://YOUR-RENDER-URL.onrender.com";
+// ⚠️ EDIT THIS before deploying — point it at your public backend URL
+// (Render/Railway URL, or an ngrok URL like https://1a2b3c4d.ngrok.app).
+// Leave as "http://localhost:8000" only for local dev. Set to "" for fully
+// offline/local-only mode (no backend sync).
+const API_BASE = "https://move-os.onrender.com";
+if (API_BASE.includes("localhost") && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") {
+  console.warn(
+    "[SWEATNET] API_BASE still points at localhost, but this page is hosted at " +
+    location.origin + " — the backend will be unreachable for judges. " +
+    "Edit API_BASE near the top of the <script type=\"module\"> block."
+  );
+}
+
 // ---------------------------------------------------------------------
 // Small helpers
 // ---------------------------------------------------------------------
@@ -970,7 +982,7 @@ function handlePoseResult(result){
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
   if(!result.landmarks || result.landmarks.length === 0){
-    setTrackingLost();
+    setTrackingLost(0, true);
     return;
   }
   const lm = result.landmarks[0];
@@ -980,7 +992,7 @@ function handlePoseResult(result){
   state.trackingConfidence = avgVis;
 
   if(avgVis < 0.45){
-    setTrackingLost();
+    setTrackingLost(avgVis, false);
     drawSkeleton(lm, avgVis);
     return;
   }
@@ -995,14 +1007,26 @@ function handlePoseResult(result){
   }
 }
 
-function setTrackingLost(){
+let stepBackHinted = false;
+function setTrackingLost(avgVis, noLandmarksAtAll){
   if(state.trackingOk){
     state.trackingOk = false;
     logViolation("Citizen Out Of View", "WARNING");
     pushObservation("Tracking confidence degraded. Verification suspended.");
   }
-  $("cctv-confidence").textContent = "TRACKING 0%";
-  $("cctv-state").textContent = "CITIZEN NOT DETECTED";
+  $("cctv-confidence").textContent = `TRACKING ${Math.round((avgVis||0)*100)}%`;
+  if(noLandmarksAtAll){
+    $("cctv-state").textContent = "CITIZEN NOT DETECTED";
+  } else {
+    // Landmarks exist but confidence is low — almost always means the exercise's
+    // key joints (hips/knees/ankles for squats etc.) are out of the camera frame,
+    // not that no one is there. Say so, don't just say "not detected".
+    $("cctv-state").textContent = "STEP BACK — FULL BODY REQUIRED";
+    if(!stepBackHinted){
+      stepBackHinted = true;
+      pushObservation("Full body not in frame. Step back so hips, knees, and ankles are visible.");
+    }
+  }
   setPipeline("pl-pose", false);
 }
 function setTrackingOk(vis){

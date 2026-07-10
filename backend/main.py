@@ -432,3 +432,12 @@ async def ws_live(websocket: WebSocket):
         bus.disconnect(websocket)
     except Exception:
         bus.disconnect(websocket)
+
+
+if __name__ == "__main__":
+    # Render/Railway/most PaaS set $PORT — bind to that instead of a fixed port.
+    import os
+    import uvicorn
+
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
