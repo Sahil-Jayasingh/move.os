@@ -581,6 +581,16 @@ const OBSERVATIONS_POOL = {
     "Motion continuity nominal. You remain a real person, for now.",
     "Liveness re-confirmed. Static citizens are reclassified as threats.",
   ],
+  ambient: [
+    "Surveillance ongoing. No action required from the citizen.",
+    "Session nominal. Your file is being updated in real time.",
+    "The lens sees all. Continue as instructed.",
+    "No irregularities detected. This will not be forgotten.",
+    "Passive observation active. Your quota clock is running.",
+    "Session logged. Efficiency will be assessed at completion.",
+    "The Ministry is watching. As always.",
+    "Routine monitoring in progress. Compliance pending final review.",
+  ],
 };
 
 // ---------------------------------------------------------------------
@@ -864,26 +874,35 @@ const MOTION_TRACK_KEYS = [
   IDX.NOSE, IDX.L_SH, IDX.R_SH, IDX.L_EL, IDX.R_EL, IDX.L_WR, IDX.R_WR,
   IDX.L_HIP, IDX.R_HIP, IDX.L_KN, IDX.R_KN, IDX.L_AN, IDX.R_AN,
 ];
-const MOTION_SENSITIVITY = 22; // higher = smaller movements trigger reps
+const MOTION_SENSITIVITY = 18;  // higher = smaller movements trigger reps
+const LANDMARK_NOISE_FLOOR = 0.0025; // per-landmark delta below this is just pose-model jitter, not real movement — ignored entirely
+const MIN_ACTIVE_LANDMARKS = 3; // real exercise moves several joints together (shoulders+elbows+wrists, or hips+knees+ankles) — require at least this many past the noise floor in the same frame, so isolated single-point jitter can't count even if that one point spikes
 let motionEnergy = 0;
 let prevMotionSnapshot = null;
 
 function genericMovementMetric(lm){
-  let delta = 0, weightSum = 0;
+  let delta = 0, weightSum = 0, activeCount = 0;
   if(prevMotionSnapshot){
     MOTION_TRACK_KEYS.forEach(k => {
       const cur = lm[k], prev = prevMotionSnapshot[k];
       const vis = cur.visibility ?? 0.8;
       if(vis > 0.35 && prev){
-        delta += Math.hypot(cur.x-prev.x, cur.y-prev.y) * vis;
-        weightSum += vis;
+        const d = Math.hypot(cur.x-prev.x, cur.y-prev.y);
+        if(d > LANDMARK_NOISE_FLOOR){
+          delta += (d - LANDMARK_NOISE_FLOOR) * vis;
+          weightSum += vis;
+          activeCount++;
+        }
       }
     });
   }
   prevMotionSnapshot = {};
   MOTION_TRACK_KEYS.forEach(k => { prevMotionSnapshot[k] = { x:lm[k].x, y:lm[k].y, visibility:lm[k].visibility }; });
 
-  const avgDelta = weightSum > 0 ? delta / weightSum : 0;
+  // Coordinated motion only — a single twitching landmark (or model jitter
+  // on one point) doesn't count as exercise; several joints moving together
+  // (shoulders rolling, arms swinging, knees marching) does.
+  const avgDelta = (weightSum > 0 && activeCount >= MIN_ACTIVE_LANDMARKS) ? delta / weightSum : 0;
   // Exponential decay so a single motion produces a smooth rise-then-fall
   // wave (like a squat's angle curve) instead of a single-frame spike.
   motionEnergy = motionEnergy * 0.85 + avgDelta * MOTION_SENSITIVITY;
@@ -895,23 +914,32 @@ function genericMovementMetric(lm){
 // Effort credits — a second, always-on credit source.
 // The full rep state machine below requires a clean bottom->standing cycle
 // to award credit, which is strict by design (it's what makes a "rep" a
-// rep). But real movement that never completes a clean cycle — shifting
-// weight, partial squats, warming up — should still nudge credits up
-// somewhat, so the bar is never stuck at 0 while someone is visibly moving.
+// rep). But real movement that never completes a clean cycle — shoulder
+// rolls, marching in place, partial squats, warming up — should still
+// nudge credits up somewhat, so the bar is never stuck at 0 while someone
+// is visibly, genuinely moving.
 // This is capped well below 100 so it can never substitute for actually
 // completing the assigned reps; it just guarantees *something* happens.
+// Requires a few consecutive qualifying frames (not just one) so a single
+// noisy frame — camera adjustment, glasses, breathing — can't tick credit;
+// only motion that actually holds up over time does.
 // ---------------------------------------------------------------------
 const EFFORT_CAP = 90;         // effort alone can't carry credits past this (reps still needed for the last stretch to 100)
-const EFFORT_MIN_METRIC = 0.1; // ignore tiny jitter/noise
+const EFFORT_MIN_METRIC = 0.16; // ignore tiny jitter/noise — real movement only (the multi-landmark + noise-floor filtering above does the heavy lifting, so this can stay low enough to catch lighter movement like shoulder rolls)
 const EFFORT_TICK_MS = 200;    // throttle so effort doesn't rack up per-frame
 const EFFORT_RATE = 0.35;      // credits per qualifying tick at full metric — paced so it climbs steadily instead of hitting the cap in a couple seconds
+const EFFORT_SUSTAIN_TICKS = 2; // consecutive above-threshold ticks required before crediting starts
 let lastEffortTick = 0;
+let effortSustainCount = 0;
 
 function addEffortCredit(metric){
-  if(metric < EFFORT_MIN_METRIC || !state.exercise || state.completed) return;
+  if(!state.exercise || state.completed) return;
+  if(metric < EFFORT_MIN_METRIC){ effortSustainCount = 0; return; }
   const now = performance.now();
   if(now - lastEffortTick < EFFORT_TICK_MS) return;
   lastEffortTick = now;
+  effortSustainCount++;
+  if(effortSustainCount < EFFORT_SUSTAIN_TICKS) return;
   state.effortCredits = clamp(state.effortCredits + metric * EFFORT_RATE, 0, EFFORT_CAP);
   recomputeCredits();
 }
@@ -1102,12 +1130,19 @@ setInterval(() => {
 // ---------------------------------------------------------------------
 const aiPending = { ambient:false, success:false, low_depth:false, tracking:false };
 const WARN_KINDS = new Set(["low_depth", "tracking"]);
+const lastFallbackIdx = {};
 
 async function requestAIObservation(kind, extra){
   const tone = WARN_KINDS.has(kind) ? "warn" : "info";
   const fallback = () => {
     const pool = OBSERVATIONS_POOL[kind] || OBSERVATIONS_POOL.good;
-    pushObservation(pool[randInt(0,pool.length-1)], tone);
+    let idx = randInt(0, pool.length-1);
+    // avoid repeating the exact same line twice in a row when the pool allows it
+    if(pool.length > 1 && idx === lastFallbackIdx[kind]){
+      idx = (idx + 1 + randInt(0, pool.length-2)) % pool.length;
+    }
+    lastFallbackIdx[kind] = idx;
+    pushObservation(pool[idx], tone);
   };
   if(!state.backendOnline || !state.sessionId){ fallback(); return; }
   if(aiPending[kind]) return;
