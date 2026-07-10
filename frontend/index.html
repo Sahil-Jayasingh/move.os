@@ -746,6 +746,46 @@ function kneeMetric(lm){
 const METRIC_FN = { squats:squatMetric, jumping_jacks:jackMetric, high_knees:kneeMetric };
 
 // ---------------------------------------------------------------------
+// Generic "any movement counts" detector
+// Instead of requiring the exact biomechanical pattern of the assigned
+// exercise (specific joint angles), this tracks overall body motion across
+// every visible landmark — arms, torso, legs, whatever's in frame. A
+// movement-and-return cycle (raise/twist/bend, then back to rest) counts
+// as a rep no matter what shape it was. Tune SENSITIVITY if reps trigger
+// too easily or not easily enough.
+// ---------------------------------------------------------------------
+const MOTION_TRACK_KEYS = [
+  IDX.NOSE, IDX.L_SH, IDX.R_SH, IDX.L_EL, IDX.R_EL, IDX.L_WR, IDX.R_WR,
+  IDX.L_HIP, IDX.R_HIP, IDX.L_KN, IDX.R_KN, IDX.L_AN, IDX.R_AN,
+];
+const MOTION_SENSITIVITY = 22; // higher = smaller movements trigger reps
+let motionEnergy = 0;
+let prevMotionSnapshot = null;
+
+function genericMovementMetric(lm){
+  let delta = 0, weightSum = 0;
+  if(prevMotionSnapshot){
+    MOTION_TRACK_KEYS.forEach(k => {
+      const cur = lm[k], prev = prevMotionSnapshot[k];
+      const vis = cur.visibility ?? 0.8;
+      if(vis > 0.35 && prev){
+        delta += Math.hypot(cur.x-prev.x, cur.y-prev.y) * vis;
+        weightSum += vis;
+      }
+    });
+  }
+  prevMotionSnapshot = {};
+  MOTION_TRACK_KEYS.forEach(k => { prevMotionSnapshot[k] = { x:lm[k].x, y:lm[k].y, visibility:lm[k].visibility }; });
+
+  const avgDelta = weightSum > 0 ? delta / weightSum : 0;
+  // Exponential decay so a single motion produces a smooth rise-then-fall
+  // wave (like a squat's angle curve) instead of a single-frame spike.
+  motionEnergy = motionEnergy * 0.85 + avgDelta * MOTION_SENSITIVITY;
+  const metric = clamp(motionEnergy, 0, 1);
+  return { metric, symmetryDelta: 0 };
+}
+
+// ---------------------------------------------------------------------
 // Exercise state machine
 // ---------------------------------------------------------------------
 const ex = {
@@ -1001,8 +1041,9 @@ function handlePoseResult(result){
   updateLiveness(lm);
 
   if(state.exercise && !state.completed){
-    const fn = METRIC_FN[state.exercise];
-    const { metric, symmetryDelta } = fn(lm);
+    // Any real movement counts, not just the exact pattern of the assigned
+    // exercise — arm raises, torso twists, yoga poses, whatever's visible.
+    const { metric, symmetryDelta } = genericMovementMetric(lm);
     updateStateMachine(metric, symmetryDelta);
   }
 }
