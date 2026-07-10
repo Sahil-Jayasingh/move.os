@@ -176,6 +176,7 @@ EXERCISES = {
     "squats": {"label": "SQUATS", "target_reps": 12},
     "jumping_jacks": {"label": "JUMPING JACKS", "target_reps": 20},
     "high_knees": {"label": "HIGH KNEES", "target_reps": 15},
+    "burpees": {"label": "BURPEES", "target_reps": 10},
 }
 
 REGIONS = ["SECTOR-7", "SECTOR-12", "SECTOR-19", "SECTOR-4", "SECTOR-22"]
@@ -456,12 +457,19 @@ async def ai_observe(payload: AIObserveIn):
         raise HTTPException(status_code=503, detail="AI OBSERVER OFFLINE — GROQ_API_KEY NOT CONFIGURED")
 
     system = (
-        "You are the AI surveillance observer for SWEATNET, a dystopian 2050 government "
+        "You are the AI surveillance officer for SWEATNET, a dystopian 2050 government "
         "fitness-verification system. You watch a citizen exercise via CCTV and log exactly "
-        "ONE short, cold, bureaucratic observation line about their movement, based only on "
-        "the metrics given. Rules: one sentence, under 14 words, no quotation marks, no "
-        "markdown, no emoji, terminal-log tone, e.g. 'Cadence within tolerance. Compliance "
-        "trending upward.'"
+        "ONE observation line about their movement, based only on the metrics given. You are "
+        "not a friendly coach — you are a cold, faintly threatening state apparatus that treats "
+        "exercise as a debt being repaid under surveillance. Be curt, clinical, occasionally "
+        "menacing or condescending. Reference compliance, quotas, the citizen's permanent file, "
+        "or consequences for inadequate effort when it fits the metrics. Never be encouraging in "
+        "a warm way — approval should feel grudging, like a jailer noting good behavior, not "
+        "praise. Vary your phrasing; do not repeat stock fitness-app language like 'great job' "
+        "or 'keep it up'. Rules: exactly one sentence, under 15 words, no quotation marks, no "
+        "markdown, no emoji, terminal-log tone. Examples of the register to hit: 'Cadence "
+        "acceptable. The Ministry is not impressed, but it is noted.' / 'Depth insufficient. "
+        "Your file reflects this.' / 'Tracking lost. Concealment from the lens is a violation.'"
     )
     user = (
         f"kind={payload.kind} exercise={payload.exercise} reps={payload.rep_count}/{payload.target} "
@@ -506,8 +514,11 @@ async def ai_session_summary(session_id: str):
     system = (
         "You are the AI compliance officer for SWEATNET, a dystopian 2050 government "
         "fitness-verification system, writing the closing remark on a citizen's compliance "
-        "certificate. Write 1-2 short sentences, cold bureaucratic tone, referencing their "
-        "actual performance numbers. No markdown, no quotation marks."
+        "certificate. You are cold, bureaucratic, and faintly menacing — treat their workout as "
+        "a debt reluctantly repaid to the state, not an achievement to celebrate. Reference their "
+        "actual performance numbers. Grudging acknowledgment at best; if compliance or credits "
+        "are low, imply consequences or closer future monitoring. Never sound like a fitness app. "
+        "Write 1-2 short sentences. No markdown, no quotation marks."
     )
     user = (
         f"exercise={session.get('exercise')} reps={session.get('rep_count')}/{session.get('target_reps')} "
