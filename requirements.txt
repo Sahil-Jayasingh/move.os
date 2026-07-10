@@ -1,1 +1,6 @@
-
+streamlit
+streamlit-webrtc
+opencv-python
+mediapipe
+numpy
+av
