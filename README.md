@@ -1,3 +1,6 @@
+# Live Link for DEMO
+https://starlit-bienenstitch-d68d55.netlify.app
+
 # SWEATNET — Proof-of-Workout Protocol
 
 > "In 2050, AI doesn't recommend healthy behavior — it decides whether you've earned the right to relax."
