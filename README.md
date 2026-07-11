@@ -126,5 +126,5 @@ everything is still in `sweatnet.db` when it comes back up.
   the appeals system with its 247-day processing time — is the satire. The verification
   engine underneath it is not a toy.
 
-##Ppt link
+## PPT link
 https://www.canva.com/design/DAHPA22lAH0/_b1rcxeeqCTWwZqH732B-A/edit
