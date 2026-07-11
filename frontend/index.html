@@ -12,6 +12,7 @@
   --white:#F2F2F2; --gray:#8B8B8B; --gray-dim:#5A5A5A;
   --red:#C81E3A; --red-dim:#5A1220;
   --green:#2E9A5E; --green-dim:#123A22;
+  --gold:#D4AF6A; --gold-dim:#3A2F18;
   --border:#242424;
   --f-mono:'IBM Plex Mono', monospace;
   --f-sans:'Inter', sans-serif;
@@ -198,14 +199,27 @@ body{ position:relative; }
 .verify-bar-inner{ height:100%; width:0%; background:var(--green); transition:width .05s linear; }
 
 /* ---------- CERTIFICATE ---------- */
-#screen-certificate{ gap:20px; }
-.cert{ width:520px; border:1.5px solid var(--white); padding:40px 44px; background:var(--bg-1); position:relative; }
-.cert::before{ content:''; position:absolute; inset:8px; border:1px solid var(--border); pointer-events:none; }
-.cert-top{ display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:22px; }
-.cert-title{ font-family:var(--f-num); font-size:15px; letter-spacing:0.1em; }
+#screen-certificate{ gap:22px; }
+.cert{ width:560px; border:1.5px solid var(--gold); padding:44px 48px; background:var(--bg-1); position:relative; }
+.cert::before{ content:''; position:absolute; inset:9px; border:1px solid var(--gold-dim); pointer-events:none; }
+.cert-corner{ position:absolute; width:16px; height:16px; border:1px solid var(--gold); opacity:0.8; }
+.cert-corner.tl{ top:-1.5px; left:-1.5px; border-right:none; border-bottom:none; }
+.cert-corner.tr{ top:-1.5px; right:-1.5px; border-left:none; border-bottom:none; }
+.cert-corner.bl{ bottom:-1.5px; left:-1.5px; border-right:none; border-top:none; }
+.cert-corner.br{ bottom:-1.5px; right:-1.5px; border-left:none; border-top:none; }
+.cert-top{ display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px; }
+.cert-title{ font-family:var(--f-num); font-size:15px; letter-spacing:0.1em; color:var(--gold); }
+.cert-hero{ text-align:center; margin:26px 0 24px; padding-bottom:22px; border-bottom:1px solid var(--gold-dim); }
+.cert-hero-label{ font-size:10px; letter-spacing:0.25em; color:var(--gray); text-transform:uppercase; margin-bottom:10px; }
+.cert-hero-name{ font-family:var(--f-num); font-size:clamp(22px,4vw,32px); font-weight:800; letter-spacing:0.04em; color:var(--white); text-shadow:0 0 24px rgba(212,175,106,0.25); }
 .cert-row{ display:flex; justify-content:space-between; font-size:12px; padding:9px 0; border-bottom:1px solid var(--border); color:var(--gray); }
 .cert-row b{ color:var(--white); font-family:var(--f-num); }
 .cert-status{ color:var(--green); font-weight:700; }
+.cert-sig{ display:flex; justify-content:space-between; align-items:flex-end; margin-top:26px; padding-top:16px; }
+.cert-sig .seal{ width:52px; height:52px; border-color:var(--gold); color:var(--gold); }
+.cert-sig-line{ text-align:right; }
+.cert-sig-name{ font-family:var(--f-num); font-size:12px; letter-spacing:0.08em; color:var(--gold); border-bottom:1px solid var(--gold-dim); padding-bottom:6px; margin-bottom:5px; }
+.cert-sig-title{ font-size:9.5px; letter-spacing:0.12em; color:var(--gray); text-transform:uppercase; }
 
 /* ---------- FINAL ---------- */
 #screen-final{ background:#000; text-align:center; gap:26px; }
@@ -386,19 +400,32 @@ body{ position:relative; }
 <!-- ================= CERTIFICATE ================= -->
 <section class="screen hidden" id="screen-certificate">
   <div class="cert">
+    <div class="cert-corner tl"></div><div class="cert-corner tr"></div>
+    <div class="cert-corner bl"></div><div class="cert-corner br"></div>
     <div class="cert-top">
       <div>
         <div class="eyebrow">World Health Authority</div>
-        <div class="cert-title">COMPLIANCE CERTIFICATE</div>
+        <div class="cert-title">CERTIFICATE OF COMPLIANCE</div>
       </div>
-      <div class="seal">WHA</div>
+      <div class="seal" style="border-color:var(--gold); color:var(--gold);">WHA</div>
     </div>
-    <div class="cert-row"><span>Citizen</span><b id="c-citizen">—</b></div>
+    <div class="cert-hero">
+      <div class="cert-hero-label">This certifies that</div>
+      <div class="cert-hero-name" id="c-citizen-name">—</div>
+    </div>
+    <div class="cert-row"><span>Citizen ID</span><b id="c-citizen">—</b></div>
     <div class="cert-row"><span>Status</span><b class="cert-status">COMPLIANT</b></div>
     <div class="cert-row"><span>Movement Credits</span><b id="c-credits">100 / 100</b></div>
     <div class="cert-row"><span>Verification Time</span><b id="c-time">—</b></div>
     <div class="cert-row"><span>Certificate ID</span><b id="c-id">—</b></div>
     <div class="cert-row" style="border-bottom:none; flex-direction:column; align-items:flex-start; gap:6px;"><span>Officer's Note</span><b id="c-notes" style="font-family:var(--f-sans); font-weight:400; text-align:left; color:var(--white);">—</b></div>
+    <div class="cert-sig">
+      <div class="seal">SIG</div>
+      <div class="cert-sig-line">
+        <div class="cert-sig-name">AUTOMATED SYSTEM — REV 12.4</div>
+        <div class="cert-sig-title">Ministry of Human Performance</div>
+      </div>
+    </div>
   </div>
   <div style="display:flex; gap:14px;">
     <button class="btn" id="btn-download-cert">Download Certificate</button>
@@ -418,7 +445,7 @@ body{ position:relative; }
 
 <!-- ================= FINAL ================= -->
 <section class="screen hidden" id="screen-final">
-  <div class="line1">AI HAS VERIFIED YOUR RIGHT TO RELAX.</div>
+  <div class="line1">AI HAS VERIFIED <span id="final-name" style="color:var(--gold, var(--white));">YOUR</span> RIGHT TO RELAX.</div>
   <div class="line2">Would you accept a society where an algorithm decides when you've earned the right to rest?</div>
   <button class="btn btn-red" id="btn-restart">Restart Simulation</button>
 </section>
@@ -634,11 +661,29 @@ $("btn-to-camera").addEventListener("click", () => {
   runCameraInitSequence();
 });
 
+// If the citizen edits their name on the ID card, carry that edit through
+// to the certificate and final screen rather than showing the original
+// randomly-generated one.
+$("cz-name").addEventListener("input", () => {
+  const val = $("cz-name").textContent.trim();
+  state.citizenName = val || newCitizenName();
+});
+$("cz-name").addEventListener("blur", () => {
+  if(!$("cz-name").textContent.trim()){
+    $("cz-name").textContent = state.citizenName;
+  }
+});
+
 function show(id){
   document.querySelectorAll(".screen").forEach(s => { s.classList.add("hidden"); s.classList.remove("active"); });
   const el = $(id);
   el.classList.remove("hidden");
   el.classList.add("active");
+  if(id === "screen-final"){
+    const name = (state.citizenName || "").trim();
+    const firstName = name.split(" ")[0] || "YOUR";
+    $("final-name").textContent = name ? `${firstName.toUpperCase()}'S` : "YOUR";
+  }
 }
 
 async function runCameraInitSequence(){
@@ -1297,30 +1342,57 @@ function syncTelemetry(){
 // the skeleton overlay. Falls back to the old rAF-polling loop on browsers
 // that don't support it (Safari < 16.4 etc).
 let lastVideoTime = -1;
+let lastFrameProcessedAt = performance.now();
+let lastDetectTimestamp = -1;
 function runDetection(timestamp){
-  if(video.currentTime !== lastVideoTime){
-    lastVideoTime = video.currentTime;
-    const result = poseLandmarker.detectForVideo(video, timestamp ?? performance.now());
-    handlePoseResult(result);
-  }
+  if(video.currentTime === lastVideoTime) return;
+  lastVideoTime = video.currentTime;
+  // detectForVideo requires a strictly increasing timestamp — if two
+  // callbacks ever land on the same/earlier millisecond it throws, which
+  // (before this fix) could kill the whole loop and freeze the skeleton
+  // on whatever was last drawn, looking exactly like a stuck old frame.
+  let ts = Math.max(Math.floor(timestamp ?? performance.now()), lastDetectTimestamp + 1);
+  lastDetectTimestamp = ts;
+  const result = poseLandmarker.detectForVideo(video, ts);
+  handlePoseResult(result);
+  lastFrameProcessedAt = performance.now();
 }
 
 function poseLoop(){
   // legacy rAF-polling path, used only as a fallback
-  if(video.readyState >= 2) runDetection(performance.now());
+  try{ if(video.readyState >= 2) runDetection(performance.now()); }
+  catch(e){ console.warn("[SWEATNET] pose frame skipped:", e); }
   requestAnimationFrame(poseLoop);
 }
 
+let poseLoopActive = false;
 function startPoseLoop(){
+  poseLoopActive = true;
   if(typeof video.requestVideoFrameCallback === "function"){
     const onFrame = (now, meta) => {
-      runDetection(meta?.mediaTime !== undefined ? performance.now() : now);
+      if(!poseLoopActive) return;
+      // Schedule the NEXT frame first. If detection throws below, the loop
+      // keeps running instead of dying silently on this frame forever.
       video.requestVideoFrameCallback(onFrame);
+      try{ runDetection(meta?.mediaTime !== undefined ? performance.now() : now); }
+      catch(e){ console.warn("[SWEATNET] pose frame skipped:", e); }
     };
     video.requestVideoFrameCallback(onFrame);
   } else {
     requestAnimationFrame(poseLoop);
   }
+
+  // Watchdog: if the video is actively playing but no frame has been
+  // processed in 1.5s, the loop has stalled (e.g. tab was backgrounded and
+  // rVFC got suspended, or some other edge case) — restart it rather than
+  // leaving a frozen skeleton on screen.
+  setInterval(() => {
+    if(!poseLoopActive || !video || video.paused || video.ended) return;
+    if(performance.now() - lastFrameProcessedAt > 1500){
+      lastFrameProcessedAt = performance.now();
+      startPoseLoop();
+    }
+  }, 1500);
 }
 
 // Tracking (i.e. "is a person even in frame") is gated on upper-body
@@ -1459,6 +1531,7 @@ async function showCertificate(){
       verification_time: nowClock(),
     };
   }
+  $("c-citizen-name").textContent = state.citizenName;
   $("c-citizen").textContent = cert.citizen_id || state.citizenId;
   $("c-credits").textContent = `${cert.movement_credits ?? state.credits} / 100`;
   $("c-time").textContent = cert.verification_time || nowClock();
@@ -1474,22 +1547,181 @@ async function showCertificate(){
   }
 }
 
-$("btn-download-cert").addEventListener("click", () => {
-  const cert = {
-    citizen: $("c-citizen").textContent,
-    status: "COMPLIANT",
-    movement_credits: $("c-credits").textContent,
-    verification_time: $("c-time").textContent,
-    certificate_id: $("c-id").textContent,
-    officers_note: $("c-notes").textContent,
-    issuing_authority: "WORLD HEALTH AUTHORITY — MINISTRY OF HUMAN PERFORMANCE",
-  };
-  const blob = new Blob([JSON.stringify(cert, null, 2)], { type:"application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url; a.download = `${cert.certificate_id}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
+// ---------------------------------------------------------------------
+// Certificate image renderer — draws a keepsake-style PNG matching the
+// on-screen certificate, so "Download Certificate" gives citizens an
+// actual image to keep/share/print instead of a raw JSON dump.
+// ---------------------------------------------------------------------
+function ctxLetterSpaced(ctx, text, cx, y, spacing){
+  let total = 0;
+  for(const ch of text) total += ctx.measureText(ch).width + spacing;
+  total -= spacing;
+  let x = cx - total/2;
+  const prevAlign = ctx.textAlign;
+  ctx.textAlign = "left";
+  for(const ch of text){
+    ctx.fillText(ch, x, y);
+    x += ctx.measureText(ch).width + spacing;
+  }
+  ctx.textAlign = prevAlign;
+}
+function ctxWrapText(ctx, text, x, y, maxWidth, lineHeight){
+  const words = text.split(" ");
+  let line = "", lines = 0;
+  for(let n=0;n<words.length;n++){
+    const test = line + words[n] + " ";
+    if(ctx.measureText(test).width > maxWidth && n > 0){
+      ctx.fillText(line.trim(), x, y + lines*lineHeight);
+      line = words[n] + " ";
+      lines++;
+    } else {
+      line = test;
+    }
+  }
+  ctx.fillText(line.trim(), x, y + lines*lineHeight);
+  return lines + 1;
+}
+
+async function renderCertificateCanvas(){
+  if(document.fonts && document.fonts.ready) await document.fonts.ready;
+
+  const citizenName = $("c-citizen-name").textContent || "CITIZEN";
+  const citizenId   = $("c-citizen").textContent || "—";
+  const credits     = $("c-credits").textContent || "100 / 100";
+  const time        = $("c-time").textContent || "—";
+  const certId      = $("c-id").textContent || "—";
+  const note        = $("c-notes").textContent || "";
+
+  const W = 1200, H = 860;
+  const canvas = document.createElement("canvas");
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext("2d");
+
+  const COL = { bg:"#0A0A0A", gold:"#D4AF6A", goldDim:"#3A2F18", white:"#F2F2F2", gray:"#8B8B8B", green:"#2E9A5E", border:"#242424" };
+
+  ctx.fillStyle = COL.bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // subtle vignette so it doesn't look like a flat screenshot
+  const vg = ctx.createRadialGradient(W/2,H/2,H*0.25, W/2,H/2,H*0.75);
+  vg.addColorStop(0, "rgba(0,0,0,0)"); vg.addColorStop(1, "rgba(0,0,0,0.55)");
+  ctx.fillStyle = vg; ctx.fillRect(0,0,W,H);
+
+  // double border
+  ctx.strokeStyle = COL.gold; ctx.lineWidth = 2;
+  ctx.strokeRect(30, 30, W-60, H-60);
+  ctx.strokeStyle = COL.goldDim; ctx.lineWidth = 1;
+  ctx.strokeRect(46, 46, W-92, H-92);
+
+  // corner flourishes
+  const tick = 26;
+  ctx.strokeStyle = COL.gold; ctx.lineWidth = 2;
+  const corner = (x,y,dx,dy) => { ctx.beginPath(); ctx.moveTo(x, y+dy*tick); ctx.lineTo(x,y); ctx.lineTo(x+dx*tick, y); ctx.stroke(); };
+  corner(30,30,1,1); corner(W-30,30,-1,1); corner(30,H-30,1,-1); corner(W-30,H-30,-1,-1);
+
+  ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
+
+  ctx.font = "500 13px 'IBM Plex Mono', monospace";
+  ctx.fillStyle = COL.gray;
+  ctxLetterSpaced(ctx, "WORLD HEALTH AUTHORITY", W/2, 105, 4);
+
+  ctx.font = "700 30px 'JetBrains Mono', monospace";
+  ctx.fillStyle = COL.gold;
+  ctxLetterSpaced(ctx, "CERTIFICATE OF COMPLIANCE", W/2, 145, 3);
+
+  // seal
+  ctx.beginPath(); ctx.arc(W/2, 205, 32, 0, Math.PI*2);
+  ctx.strokeStyle = COL.gold; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.font = "700 12px 'JetBrains Mono', monospace";
+  ctx.fillStyle = COL.gold;
+  ctx.fillText("WHA", W/2, 210);
+
+  ctx.font = "500 12px 'IBM Plex Mono', monospace";
+  ctx.fillStyle = COL.gray;
+  ctxLetterSpaced(ctx, "THIS CERTIFIES THAT", W/2, 272, 4);
+
+  ctx.font = "800 44px 'JetBrains Mono', monospace";
+  ctx.fillStyle = COL.white;
+  ctx.shadowColor = "rgba(212,175,106,0.35)"; ctx.shadowBlur = 22;
+  ctx.fillText(citizenName.toUpperCase(), W/2, 328);
+  ctx.shadowBlur = 0;
+
+  ctx.strokeStyle = COL.goldDim; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(110, 362); ctx.lineTo(W-110, 362); ctx.stroke();
+
+  const rows = [
+    ["CITIZEN ID", citizenId, COL.white],
+    ["STATUS", "COMPLIANT", COL.green],
+    ["MOVEMENT CREDITS", credits, COL.white],
+    ["VERIFICATION TIME", time, COL.white],
+    ["CERTIFICATE ID", certId, COL.white],
+  ];
+  let ry = 410;
+  rows.forEach(([label, val, color]) => {
+    ctx.textAlign = "left";
+    ctx.font = "500 13px 'IBM Plex Mono', monospace";
+    ctx.fillStyle = COL.gray;
+    ctx.fillText(label, 110, ry);
+    ctx.textAlign = "right";
+    ctx.font = "600 15px 'JetBrains Mono', monospace";
+    ctx.fillStyle = color;
+    ctx.fillText(val, W-110, ry);
+    ctx.strokeStyle = COL.border; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(110, ry+16); ctx.lineTo(W-110, ry+16); ctx.stroke();
+    ry += 48;
+  });
+
+  if(note && !/generating|not permitted|unavailable/i.test(note)){
+    ctx.textAlign = "left";
+    ctx.font = "500 12px 'IBM Plex Mono', monospace";
+    ctx.fillStyle = COL.gray;
+    ctx.fillText("OFFICER'S NOTE", 110, ry + 8);
+    ctx.font = "400 15px Inter, sans-serif";
+    ctx.fillStyle = COL.white;
+    ctxWrapText(ctx, note, 110, ry + 34, W - 220, 22);
+  }
+
+  // signature block
+  ctx.textAlign = "left";
+  ctx.beginPath(); ctx.arc(150, H-95, 26, 0, Math.PI*2);
+  ctx.strokeStyle = COL.border; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.font = "700 10px 'JetBrains Mono', monospace";
+  ctx.fillStyle = COL.gray;
+  ctx.textAlign = "center";
+  ctx.fillText("SIG", 150, H-91);
+
+  ctx.textAlign = "right";
+  ctx.font = "600 13px 'JetBrains Mono', monospace";
+  ctx.fillStyle = COL.gold;
+  ctx.fillText("AUTOMATED SYSTEM — REV 12.4", W-110, H-98);
+  ctx.font = "500 10px 'IBM Plex Mono', monospace";
+  ctx.fillStyle = COL.gray;
+  ctx.fillText("MINISTRY OF HUMAN PERFORMANCE", W-110, H-80);
+
+  return canvas;
+}
+
+$("btn-download-cert").addEventListener("click", async () => {
+  const btn = $("btn-download-cert");
+  const original = btn.textContent;
+  btn.textContent = "Rendering…";
+  btn.disabled = true;
+  try{
+    const canvas = await renderCertificateCanvas();
+    await new Promise((resolve) => {
+      canvas.toBlob((blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = `SWEATNET-${$("c-id").textContent}.png`;
+        a.click();
+        URL.revokeObjectURL(url);
+        resolve();
+      }, "image/png");
+    });
+  } finally {
+    btn.textContent = original;
+    btn.disabled = false;
+  }
 });
 
 $("btn-continue-final").addEventListener("click", () => {
