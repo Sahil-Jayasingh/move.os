@@ -125,3 +125,6 @@ everything is still in `sweatnet.db` when it comes back up.
 - Everything about the *interface* — the seals, the legal footer, the propaganda banner,
   the appeals system with its 247-day processing time — is the satire. The verification
   engine underneath it is not a toy.
+
+##Ppt link
+https://www.canva.com/design/DAHPA22lAH0/_b1rcxeeqCTWwZqH732B-A/edit
